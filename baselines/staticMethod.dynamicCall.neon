@@ -1,0 +1,23 @@
+# total 4 errors
+
+parameters:
+    ignoreErrors:
+        -
+            message: '#^Dynamic call to static method App\\Commands\\MusicCommand\:\:notify\(\)\.$#'
+            count: 1
+            path: ../app/Commands/MusicCommand.php
+
+        -
+            message: '#^Dynamic call to static method Illuminate\\Foundation\\Application\:\:isProduction\(\)\.$#'
+            count: 1
+            path: ../app/Commands/OptimizeImageCommand.php
+
+        -
+            message: '#^Dynamic call to static method Illuminate\\Foundation\\Application\:\:isProduction\(\)\.$#'
+            count: 1
+            path: ../app/Commands/VendorPublishCommand.php
+
+        -
+            message: '#^Dynamic call to static method Symfony\\Component\\VarDumper\\VarDumper\:\:getDefaultContextProviders\(\)\.$#'
+            count: 1
+            path: ../app/Support/ServerDumper.php

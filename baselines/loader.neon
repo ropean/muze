@@ -1,0 +1,7 @@
+# total 7 errors
+
+includes:
+    - nullCoalesce.variable.neon
+    - shipmonk.deadMethod.neon
+    - staticMethod.dynamicCall.neon
+    - typePerfect.narrowPublicClassMethodParamType.neon

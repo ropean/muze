@@ -1,0 +1,64 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Copyright (c) 2019-2026 guanguans<ityaozm@gmail.com>
+ *
+ * For the full copyright and license information, please view
+ * the LICENSE file that was distributed with this source code.
+ *
+ * @see https://github.com/guanguans/music-dl
+ */
+
+use ShipMonk\ComposerDependencyAnalyser\Config\Configuration;
+use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
+
+return (new Configuration)
+    ->addPathsToScan(
+        [
+            __DIR__.'/app/',
+            __DIR__.'/bootstrap/',
+            __DIR__.'/config/',
+            __DIR__.'/resources/',
+            __DIR__.'/tests/',
+            __DIR__.'/music-dl',
+        ],
+        false
+    )
+    ->addPathsToExclude([
+        __DIR__.'/app/Commands/OptimizeImageCommand.php',
+        __DIR__.'/app/Support/ComposerScripts.php',
+        __DIR__.'/resources/require/vendor/',
+        __DIR__.'/tests/',
+    ])
+    ->enableAnalysisOfUnusedDevDependencies()
+    /** @see \ShipMonk\ComposerDependencyAnalyser\Analyser::CORE_EXTENSIONS */
+    ->ignoreErrorsOnExtensions(
+        [
+            // 'ext-pdo',
+            // 'ext-pcntl',
+        ],
+        [ErrorType::SHADOW_DEPENDENCY]
+    )
+    ->ignoreErrorsOnPackages(
+        [
+            'laravel-zero/phar-updater',
+            'spatie/fork',
+            'ergebnis/composer-normalize',
+        ],
+        [ErrorType::UNUSED_DEPENDENCY]
+    )
+    ->ignoreErrorsOnPackages(
+        [
+            'composer/xdebug-handler',
+            'guzzlehttp/guzzle',
+            'laravel-zero/foundation',
+            'laravel/prompts',
+            'nunomaduro/laravel-console-summary',
+            'psr/http-message',
+            'symfony/console',
+            'symfony/var-dumper',
+        ],
+        [ErrorType::SHADOW_DEPENDENCY]
+    );

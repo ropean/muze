@@ -1,0 +1,165 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Copyright (c) 2019-2026 guanguans<ityaozm@gmail.com>
+ *
+ * For the full copyright and license information, please view
+ * the LICENSE file that was distributed with this source code.
+ *
+ * @see https://github.com/guanguans/music-dl
+ */
+
+namespace App;
+
+use App\Concerns\HttpClientFactory;
+use App\Support\Meting;
+use GuzzleHttp\RequestOptions;
+use Illuminate\Contracts\Concurrency\Driver;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Concurrency;
+use Illuminate\Support\Timebox;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Dumpable;
+use Illuminate\Support\Traits\ForwardsCalls;
+use Illuminate\Support\Traits\Localizable;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\Traits\Tappable;
+use Laravel\Prompts\Progress;
+use Psr\Http\Message\ResponseInterface;
+use function Laravel\Prompts\progress;
+
+final class Music implements Contracts\HttpClientFactory, Contracts\Music
+{
+    use Conditionable;
+    use Dumpable;
+    use ForwardsCalls;
+    use HttpClientFactory;
+    use Localizable;
+    use Macroable;
+    use Tappable;
+
+    public function __construct(
+        private Meting $meting = new Meting,
+        private ?Driver $driver = null,
+        private readonly Timebox $timebox = new Timebox,
+        private int $minCallMicroseconds = 3820 * 1000,
+    ) {
+        $this->driver ??= Concurrency::driver();
+    }
+
+    /**
+     * @see Meting::search()
+     *
+     * @throws \Throwable
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function search(string $keyword, array $options): Collection
+    {
+        $options += [
+            'sources' => config('music.sources'),
+            'type' => 1,
+            'page' => 1,
+            'limit' => 30,
+        ];
+
+        return $this->timebox->call(
+            fn (): Collection => collect($options['sources'])
+                ->map(fn (string $source): array => json_decode(
+                    (string) $this->meting->site($source)->search($keyword, $options),
+                    true,
+                    512,
+                    \JSON_THROW_ON_ERROR
+                ))
+                ->collapse()
+                // ->dd()
+                ->pipe(fn (Collection $songs): Collection => $this->ensureWithUrls($songs))
+                ->values()
+                ->mapWithKeys(static fn (array $song, int $index): array => [$index + 1 => $song]),
+            $this->minCallMicroseconds
+        );
+    }
+
+    /**
+     * @throws \GuzzleHttp\Exception\GuzzleException
+     * @throws \Throwable
+     */
+    public function download(string $url, string $savedPath): void
+    {
+        $this->timebox->call(
+            fn (): ResponseInterface => $this->createHttpClient()->get($url, [
+                RequestOptions::SINK => $savedPath,
+                RequestOptions::PROGRESS => static function (int $totalDownload, int $downloaded) use (&$progress, $savedPath): void {
+                    if (0 === $totalDownload || 0 === $downloaded || 'submit' === $progress?->state) {
+                        return;
+                    }
+
+                    // @codeCoverageIgnoreStart
+                    if (!$progress instanceof Progress) {
+                        /** @noinspection PhpVoidFunctionResultUsedInspection */
+                        $progress = tap(progress($savedPath, $totalDownload))->start();
+                    }
+
+                    if ($totalDownload === $downloaded) {
+                        $progress->finish();
+                    }
+
+                    $progress->advance($downloaded - $progress->progress);
+                    // @codeCoverageIgnoreEnd
+                },
+            ]),
+            $this->minCallMicroseconds
+        );
+    }
+
+    /**
+     * @api
+     */
+    public function setMeting(Meting $meting): self
+    {
+        $this->meting = $meting;
+
+        return $this;
+    }
+
+    /**
+     * @api
+     */
+    public function setDriver(Driver $driver): self
+    {
+        $this->driver = $driver;
+
+        return $this;
+    }
+
+    /**
+     * @api
+     */
+    public function setMinCallMicroseconds(int $minCallMicroseconds): self
+    {
+        $this->minCallMicroseconds = $minCallMicroseconds;
+
+        return $this;
+    }
+
+    /**
+     * @param Collection<int, array<string, mixed>> $songs
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function ensureWithUrls(Collection $songs): Collection
+    {
+        return collect($this->driver->run(
+            $songs->map(fn (array $song): callable => fn (): array => $song + (array) json_decode(
+                (string) $this->meting->site($song['source'])->url($song['url_id']),
+                true,
+                512,
+                \JSON_THROW_ON_ERROR
+            ))->all()
+        ))
+            ->filter()
+            ->reject(static fn (array $song): bool => empty($song['url']));
+    }
+}
