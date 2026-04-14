@@ -86,6 +86,35 @@ final class Music implements Contracts\HttpClientFactory, Contracts\Music
      * @throws \GuzzleHttp\Exception\GuzzleException
      * @throws \Throwable
      */
+    public function downloadSong(array $song, string $savedPath): void
+    {
+        try {
+            $this->download($song['url'], $savedPath);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            if ($e->getResponse()->getStatusCode() !== 403) {
+                throw $e;
+            }
+
+            // URL expired — fetch a fresh one and retry once
+            $refreshed = json_decode(
+                (string) $this->meting->site($song['source'])->url($song['url_id']),
+                true,
+                512,
+                \JSON_THROW_ON_ERROR,
+            );
+
+            if (empty($refreshed['url'])) {
+                throw $e;
+            }
+
+            $this->download($refreshed['url'], $savedPath);
+        }
+    }
+
+    /**
+     * @throws \GuzzleHttp\Exception\GuzzleException
+     * @throws \Throwable
+     */
     public function download(string $url, string $savedPath): void
     {
         $this->timebox->call(

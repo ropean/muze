@@ -143,8 +143,8 @@ final class MusicCommand extends Command implements Isolatable, PromptsForMissin
                         )
                 )->containsStrict(0) ? $songs : $songs->only($selectedKeys->all())
             )
-            ->each(fn (array $song): ?\Throwable => $this->rescue(fn (): null => $this->music->download(
-                $song['url'],
+            ->each(fn (array $song): ?\Throwable => $this->rescue(fn (): null => $this->music->downloadSong(
+                $song,
                 Utils::savedPathFor($song, $this->option('directory'))
             )))
             ->unless($this->option('no-notify'), function (): void {
