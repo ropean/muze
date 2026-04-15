@@ -25,4 +25,16 @@ interface Music
     public function search(string $keyword, array $options): Collection;
 
     public function download(string $url, string $savedPath): void;
+
+    /**
+     * Download a song with automatic URL refresh on 403.
+     *
+     * Tries the URL already present in $song['url']. If the server returns 403
+     * (URL expired), fetches a fresh URL via Meting and retries once.
+     * Any other HTTP error is re-thrown so the caller can handle/skip it.
+     *
+     * @param array<string, mixed> $song     Song array as returned by search() — must contain url, url_id, source
+     * @param string               $savedPath Local file path to write the audio to
+     */
+    public function downloadSong(array $song, string $savedPath): void;
 }
