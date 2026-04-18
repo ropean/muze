@@ -55,9 +55,12 @@ func NewNetease() *Netease {
 	}
 }
 
+// Name returns the source identifier.
+func (n *Netease) Name() string { return "netease" }
+
 // Search queries Netease Cloud Music for the given keyword.
 // Uses the public GET /api/search/get endpoint (no encryption needed).
-func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, error) {
+func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int, bool, error) {
 	if opts.PerPage == 0 {
 		opts.PerPage = 30
 	}
@@ -73,7 +76,7 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, err
 
 	body, err := n.get("/api/search/get?" + params.Encode())
 	if err != nil {
-		return nil, fmt.Errorf("netease search: %w", err)
+		return nil, 0, false, fmt.Errorf("netease search: %w", err)
 	}
 
 	var resp struct {
@@ -85,17 +88,20 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, err
 					Name string `json:"name"`
 				} `json:"artists"`
 				Album struct {
-					Name string `json:"name"`
+					Name  string `json:"name"`
+					PicID int64  `json:"picId"`
 				} `json:"album"`
 			} `json:"songs"`
+			SongCount int  `json:"songCount"`
+			HasMore   bool `json:"hasMore"`
 		} `json:"result"`
 		Code int `json:"code"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("netease search decode: %w", err)
+		return nil, 0, false, fmt.Errorf("netease search decode: %w", err)
 	}
 	if resp.Code != 200 {
-		return nil, fmt.Errorf("netease search api error: code=%d", resp.Code)
+		return nil, 0, false, fmt.Errorf("netease search api error: code=%d", resp.Code)
 	}
 
 	songs := make([]models.Song, 0, len(resp.Result.Songs))
@@ -104,21 +110,23 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, err
 		for i, a := range s.Artists {
 			artists[i] = a.Name
 		}
+		idStr := strconv.Itoa(s.ID)
 		songs = append(songs, models.Song{
-			ID:     strconv.Itoa(s.ID),
-			Name:   s.Name,
-			Artist: strings.Join(artists, " / "),
-			Album:  s.Album.Name,
-			Source: "netease",
+			Title:   s.Name,
+			Artist:  strings.Join(artists, " / "),
+			Source:  "netease",
+			URLID:   idStr,
+			PicID:   strconv.FormatInt(s.Album.PicID, 10),
+			LyricID: idStr, // Netease uses song id for lyric lookup
 		})
 	}
-	return songs, nil
+	return songs, resp.Result.SongCount, resp.Result.HasMore, nil
 }
 
 // GetURL resolves a playable download URL for the given song ID.
 // Uses POST /weapi/song/enhance/player/url with AES+RSA encryption,
 // identical to Meting PHP v1.5.11 netease_AESCBC flow.
-func (n *Netease) GetURL(id string) (string, error) {
+func (n *Netease) GetURL(id string) (models.URLResult, error) {
 	payload := map[string]any{
 		"ids": []string{id},
 		"br":  320000,
@@ -126,7 +134,7 @@ func (n *Netease) GetURL(id string) (string, error) {
 
 	body, err := n.weapi("/weapi/song/enhance/player/url", payload)
 	if err != nil {
-		return "", fmt.Errorf("netease url: %w", err)
+		return models.URLResult{}, fmt.Errorf("netease url: %w", err)
 	}
 
 	var resp struct {
@@ -142,24 +150,31 @@ func (n *Netease) GetURL(id string) (string, error) {
 		Code int `json:"code"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("netease url decode: %w", err)
+		return models.URLResult{}, fmt.Errorf("netease url decode: %w", err)
 	}
 	if resp.Code != 200 {
-		return "", fmt.Errorf("netease url api error: code=%d", resp.Code)
+		return models.URLResult{}, fmt.Errorf("netease url api error: code=%d", resp.Code)
 	}
 	if len(resp.Data) == 0 {
-		return "", fmt.Errorf("netease url: no data returned for id=%s", id)
+		return models.URLResult{}, fmt.Errorf("netease url: no data returned for id=%s", id)
 	}
 
 	d := resp.Data[0]
 	// Meting checks uf.url first (alternate URL), then falls back to url
+	resolvedURL := d.URL
 	if d.UF != nil && d.UF.URL != "" {
-		return d.UF.URL, nil
+		resolvedURL = d.UF.URL
 	}
-	if d.URL == "" {
-		return "", fmt.Errorf("netease url: song id=%s is not available (code=%d)", id, d.Code)
+	if resolvedURL == "" {
+		return models.URLResult{}, fmt.Errorf("netease url: song id=%s is not available (code=%d)", id, d.Code)
 	}
-	return d.URL, nil
+	return models.URLResult{
+		URL:    resolvedURL,
+		Size:   d.Size,
+		BR:     d.BR,
+		Source: "netease",
+		ID:     id,
+	}, nil
 }
 
 // weapi sends an AES+RSA-encrypted POST — mirrors Meting's netease_AESCBC().

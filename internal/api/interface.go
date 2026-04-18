@@ -10,6 +10,10 @@ type SearchOptions struct {
 
 // MusicSource is the common interface every platform must implement.
 type MusicSource interface {
-	Search(keyword string, opts SearchOptions) ([]models.Song, error)
-	GetURL(id string) (string, error)
+	// Name returns the source identifier string (e.g. "netease").
+	Name() string
+	// Search returns matched songs plus total count and hasMore flag.
+	Search(keyword string, opts SearchOptions) (songs []models.Song, total int, hasMore bool, err error)
+	// GetURL resolves a full URLResult for the given track ID.
+	GetURL(id string) (models.URLResult, error)
 }

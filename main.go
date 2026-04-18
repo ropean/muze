@@ -1,7 +1,7 @@
 package main
 
-import "fmt"
+import "github.com/ropean/music-dl-cn/cmd"
 
 func main() {
-	fmt.Println("music-dl-cn — Go edition (WIP)")
+	cmd.Execute()
 }
