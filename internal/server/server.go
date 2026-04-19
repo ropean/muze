@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ropean/music-dl-cn/internal/api"
-	"github.com/ropean/music-dl-cn/internal/models"
+	"github.com/ropean/music-provider-cn/internal/api"
+	"github.com/ropean/music-provider-cn/internal/models"
 )
 
 // New returns an http.Handler that implements the provider contract.

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ropean/music-dl-cn/internal/api"
-	"github.com/ropean/music-dl-cn/internal/models"
+	"github.com/ropean/music-provider-cn/internal/api"
+	"github.com/ropean/music-provider-cn/internal/models"
 )
 
 func TestNeteaseSearch_LiuDehua(t *testing.T) {
@@ -38,6 +38,9 @@ func TestNeteaseSearch_LiuDehua(t *testing.T) {
 	}
 	if first.LyricID == "" {
 		t.Error("lyric_id is empty")
+	}
+	if first.Album == "" {
+		t.Error("album is empty — netease search should include album name when present")
 	}
 	if total == 0 {
 		t.Error("total should be > 0")
@@ -137,16 +140,19 @@ func TestSongShape(t *testing.T) {
 	s := models.Song{
 		Title:   "Test",
 		Artist:  "Artist",
+		Album:   "Album",
 		Source:  "netease",
 		URLID:   "123",
 		PicID:   "456",
 		LyricID: "123",
+		BR:      320000,
+		Size:    1000,
 	}
 	b, _ := json.Marshal(s)
 	var m map[string]any
 	json.Unmarshal(b, &m)
 
-	for _, key := range []string{"title", "artist", "source", "url_id", "url", "pic_id", "lyric_id"} {
+	for _, key := range []string{"title", "artist", "album", "source", "url_id", "url", "pic_id", "lyric_id", "br", "size"} {
 		if _, ok := m[key]; !ok {
 			t.Errorf("Song JSON missing required key: %q", key)
 		}

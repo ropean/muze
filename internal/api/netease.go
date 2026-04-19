@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ropean/music-dl-cn/internal/models"
+	"github.com/ropean/music-provider-cn/internal/models"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 	neteaseNonce = "0CoJUm6Qyw8W8jud"
 	neteaseIV    = "0102030405060708"
 
-	// RSA 1024-bit public key (decimal, as in Meting PHP source)
+	// RSA 1024-bit public key (decimal, from Meting v1.5.11)
 	// modulus N (decimal)
 	neteaseRSAMod = "157794750267131502212476817800345498121872783333389747424011531025366277535262539913701806290766479189477533597854989606803194253978660329941980786072432806427833685472618792592200595694346872951301770580765135349259590167490536138082469680638514416594216629258349130257685001248172188325316586707301643237607"
 	// public exponent e
@@ -114,6 +114,7 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int
 		songs = append(songs, models.Song{
 			Title:   s.Name,
 			Artist:  strings.Join(artists, " / "),
+			Album:   strings.TrimSpace(s.Album.Name),
 			Source:  "netease",
 			URLID:   idStr,
 			PicID:   strconv.FormatInt(s.Album.PicID, 10),
@@ -125,7 +126,7 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int
 
 // GetURL resolves a playable download URL for the given song ID.
 // Uses POST /weapi/song/enhance/player/url with AES+RSA encryption,
-// identical to Meting PHP v1.5.11 netease_AESCBC flow.
+// identical to Meting v1.5.11 netease_AESCBC flow.
 func (n *Netease) GetURL(id string) (models.URLResult, error) {
 	payload := map[string]any{
 		"ids": []string{id},
@@ -139,8 +140,8 @@ func (n *Netease) GetURL(id string) (models.URLResult, error) {
 
 	var resp struct {
 		Data []struct {
-			URL  string `json:"url"`
-			UF   *struct {
+			URL string `json:"url"`
+			UF  *struct {
 				URL string `json:"url"`
 			} `json:"uf"`
 			Size int `json:"size"`
@@ -179,7 +180,7 @@ func (n *Netease) GetURL(id string) (models.URLResult, error) {
 
 // weapi sends an AES+RSA-encrypted POST — mirrors Meting's netease_AESCBC().
 //
-// Encryption flow (exactly matching Meting PHP v1.5.11):
+// Encryption flow (matching Meting v1.5.11):
 //  1. Generate 16-char random hex skey (= bin2hex(random_bytes(8)))
 //  2. AES-128-CBC encrypt JSON body with nonce key → base64 string S1
 //  3. AES-128-CBC encrypt S1 bytes with skey → base64 string S2  (params)
@@ -190,7 +191,7 @@ func (n *Netease) weapi(path string, params map[string]any) ([]byte, error) {
 		return nil, err
 	}
 
-	skey := n.randomHex(16) // 16 hex chars = 16 ASCII bytes (matches PHP getRandomHex(16))
+	skey := n.randomHex(16) // 16 hex chars = 16 ASCII bytes (Meting getRandomHex(16))
 
 	// Step 1: AES-CBC with fixed nonce → raw bytes → base64
 	enc1, err := aesCBCEncrypt(jsonBody, []byte(neteaseNonce), []byte(neteaseIV))
@@ -244,7 +245,7 @@ func (n *Netease) get(path string) ([]byte, error) {
 }
 
 // setHeaders applies the iPhone CloudMusic client simulation headers,
-// matching Meting PHP curlset() for the netease case.
+// matching Meting curlset() for the netease case.
 func (n *Netease) setHeaders(req *http.Request) {
 	req.Header.Set("Referer", "https://music.163.com/")
 	req.Header.Set("Cookie", neteaseCookie)
@@ -272,31 +273,29 @@ func pkcs7Pad(data []byte, blockSize int) []byte {
 	return append(data, bytes.Repeat([]byte{byte(pad)}, pad)...)
 }
 
-// neteaseRSA mirrors Meting PHP's RSA section of netease_AESCBC():
+// neteaseRSA mirrors Meting's RSA section of netease_AESCBC():
 //
 //	strrev → str2hex → bchexdec → bcpowmod(skey, 65537, N) → bcdechex → str_pad 256
 func neteaseRSA(skey []byte) string {
-	// reverse bytes (PHP: strrev)
+	// reverse skey bytes (Meting: strrev)
 	rev := make([]byte, len(skey))
 	for i, b := range skey {
 		rev[len(skey)-1-i] = b
 	}
 
 	// treat reversed bytes as big-endian big integer
-	// equivalent to PHP: bchexdec(str2hex(reversed)) for ASCII bytes
+	// big-endian integer from reversed ASCII bytes (Meting: bchexdec(str2hex(reversed)))
 	m := new(big.Int).SetBytes(rev)
 
-	N, _ := new(big.Int).SetString(neteaseRSAMod, 10) // decimal modulus from PHP
+	N, _ := new(big.Int).SetString(neteaseRSAMod, 10) // decimal modulus from Meting
 	e := big.NewInt(neteaseRSAExp)
 	result := new(big.Int).Exp(m, e, N)
 
-	// pad to 256 hex chars (128 bytes = 1024-bit RSA output), matches PHP str_pad($s, 256, '0', STR_PAD_LEFT)
+	// pad to 256 hex chars (128 bytes = 1024-bit RSA output), matches Meting str_pad left to 256
 	return fmt.Sprintf("%0256x", result)
 }
 
-// randomHex returns n random lowercase hex characters, matching PHP getRandomHex(n):
-//
-//	bin2hex(random_bytes(n/2))
+// randomHex returns n random lowercase hex characters (Meting getRandomHex(n) / bin2hex(random_bytes(n/2))).
 func (n *Netease) randomHex(length int) string {
 	b := make([]byte, length/2)
 	for i := range b {
@@ -306,7 +305,7 @@ func (n *Netease) randomHex(length int) string {
 }
 
 // randomChineseIP returns a random IP from range 112.31.0.0–112.31.255.255,
-// matching PHP: long2ip(mt_rand(1884815360, 1884890111)).
+// matching Meting: long2ip(mt_rand(1884815360, 1884890111)).
 func (n *Netease) randomChineseIP() string {
 	ip := int64(neteaseIPMin) + n.rng.Int63n(int64(neteaseIPMax-neteaseIPMin+1))
 	return fmt.Sprintf("%d.%d.%d.%d", (ip>>24)&0xff, (ip>>16)&0xff, (ip>>8)&0xff, ip&0xff)

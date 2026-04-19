@@ -9,8 +9,8 @@ import (
 )
 
 var root = &cobra.Command{
-	Use:   "music-dl",
-	Short: "Cross-platform music search and download CLI",
+	Use:               "music-provider-cn",
+	Short:             "Cross-platform music search and download CLI",
 	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 }
 

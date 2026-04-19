@@ -1,4 +1,4 @@
-module github.com/ropean/music-dl-cn
+module github.com/ropean/music-provider-cn
 
 go 1.24.7
 

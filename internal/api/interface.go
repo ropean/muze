@@ -1,6 +1,6 @@
 package api
 
-import "github.com/ropean/music-dl-cn/internal/models"
+import "github.com/ropean/music-provider-cn/internal/models"
 
 // SearchOptions controls search behaviour.
 type SearchOptions struct {
