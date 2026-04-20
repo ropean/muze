@@ -122,14 +122,10 @@ func (n *Netease) searchPage(keyword string, page, perPage int) (songs []models.
 	return out, resp.Result.SongCount, realHasMore, nil
 }
 
-// maxExtraPages caps how many additional pages we fetch when filling
-// a page after URL validation filters out unavailable songs.
-const maxExtraPages = 3
-
 // Search queries Netease Cloud Music for the given keyword.
 // Each song is validated via GetURL to ensure the result is playable;
-// unavailable songs are filtered out. If filtering leaves fewer than
-// PerPage songs, additional pages are fetched automatically.
+// unavailable songs are filtered out. The caller (worker) handles
+// pagination — this method fetches exactly one raw page per call.
 func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int, bool, error) {
 	if opts.PerPage == 0 {
 		opts.PerPage = 30
@@ -138,60 +134,17 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int
 		opts.Page = 1
 	}
 
-	var (
-		collected []models.Song
-		songCount int
-		hasMore   bool
-		curPage   = opts.Page
-		extra     int
-	)
-
-	for len(collected) < opts.PerPage {
-		raw, sc, hm, err := n.searchPage(keyword, curPage, opts.PerPage)
-		if err != nil {
-			if len(collected) > 0 {
-				break
-			}
-			return nil, 0, false, err
-		}
-		songCount = sc
-		hasMore = hm
-
-		if len(raw) == 0 {
-			hasMore = false
-			break
-		}
-
-		validated := n.validateURLs(raw)
-		collected = append(collected, validated...)
-
-		if !hasMore {
-			break
-		}
-		if len(collected) >= opts.PerPage {
-			break
-		}
-
-		curPage++
-		extra++
-		if extra >= maxExtraPages {
-			break
-		}
+	raw, songCount, hasMore, err := n.searchPage(keyword, opts.Page, opts.PerPage)
+	if err != nil {
+		return nil, 0, false, err
 	}
 
-	// Trim to requested page size
-	if len(collected) > opts.PerPage {
-		collected = collected[:opts.PerPage]
+	if len(raw) == 0 {
+		return nil, songCount, false, nil
 	}
 
-	// If we filled a full page, there are likely more results
-	if len(collected) >= opts.PerPage && hasMore {
-		hasMore = true
-	} else if len(collected) < opts.PerPage {
-		hasMore = false
-	}
-
-	return collected, songCount, hasMore, nil
+	validated := n.validateURLs(raw)
+	return validated, songCount, hasMore, nil
 }
 
 const urlValidationConcurrency = 50
