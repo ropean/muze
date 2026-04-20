@@ -12,8 +12,10 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ropean/music-provider-cn/internal/models"
@@ -58,21 +60,13 @@ func NewNetease() *Netease {
 // Name returns the source identifier.
 func (n *Netease) Name() string { return "netease" }
 
-// Search queries Netease Cloud Music for the given keyword.
-// Uses the public GET /api/search/get endpoint (no encryption needed).
-func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int, bool, error) {
-	if opts.PerPage == 0 {
-		opts.PerPage = 30
-	}
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-
+// searchPage fetches a single page of raw search results from the Netease API.
+func (n *Netease) searchPage(keyword string, page, perPage int) (songs []models.Song, songCount int, hasMore bool, err error) {
 	params := url.Values{}
 	params.Set("s", keyword)
 	params.Set("type", "1")
-	params.Set("limit", strconv.Itoa(opts.PerPage))
-	params.Set("offset", strconv.Itoa((opts.Page-1)*opts.PerPage))
+	params.Set("limit", strconv.Itoa(perPage))
+	params.Set("offset", strconv.Itoa((page-1)*perPage))
 
 	body, err := n.get("/api/search/get?" + params.Encode())
 	if err != nil {
@@ -104,24 +98,151 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int
 		return nil, 0, false, fmt.Errorf("netease search api error: code=%d", resp.Code)
 	}
 
-	songs := make([]models.Song, 0, len(resp.Result.Songs))
+	out := make([]models.Song, 0, len(resp.Result.Songs))
 	for _, s := range resp.Result.Songs {
 		artists := make([]string, len(s.Artists))
 		for i, a := range s.Artists {
 			artists[i] = a.Name
 		}
 		idStr := strconv.Itoa(s.ID)
-		songs = append(songs, models.Song{
+		out = append(out, models.Song{
 			Title:   s.Name,
 			Artist:  strings.Join(artists, " / "),
 			Album:   strings.TrimSpace(s.Album.Name),
 			Source:  "netease",
 			URLID:   idStr,
 			PicID:   strconv.FormatInt(s.Album.PicID, 10),
-			LyricID: idStr, // Netease uses song id for lyric lookup
+			LyricID: idStr,
 		})
 	}
-	return songs, resp.Result.SongCount, resp.Result.HasMore, nil
+
+	// Netease hasMore is unreliable — treat a full page as "more available"
+	realHasMore := resp.Result.HasMore || len(out) >= perPage
+
+	return out, resp.Result.SongCount, realHasMore, nil
+}
+
+// maxExtraPages caps how many additional pages we fetch when filling
+// a page after URL validation filters out unavailable songs.
+const maxExtraPages = 3
+
+// Search queries Netease Cloud Music for the given keyword.
+// Each song is validated via GetURL to ensure the result is playable;
+// unavailable songs are filtered out. If filtering leaves fewer than
+// PerPage songs, additional pages are fetched automatically.
+func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int, bool, error) {
+	if opts.PerPage == 0 {
+		opts.PerPage = 30
+	}
+	if opts.Page == 0 {
+		opts.Page = 1
+	}
+
+	var (
+		collected []models.Song
+		songCount int
+		hasMore   bool
+		curPage   = opts.Page
+		extra     int
+	)
+
+	for len(collected) < opts.PerPage {
+		raw, sc, hm, err := n.searchPage(keyword, curPage, opts.PerPage)
+		if err != nil {
+			if len(collected) > 0 {
+				break
+			}
+			return nil, 0, false, err
+		}
+		songCount = sc
+		hasMore = hm
+
+		if len(raw) == 0 {
+			hasMore = false
+			break
+		}
+
+		validated := n.validateURLs(raw)
+		collected = append(collected, validated...)
+
+		if !hasMore {
+			break
+		}
+		if len(collected) >= opts.PerPage {
+			break
+		}
+
+		curPage++
+		extra++
+		if extra >= maxExtraPages {
+			break
+		}
+	}
+
+	// Trim to requested page size
+	if len(collected) > opts.PerPage {
+		collected = collected[:opts.PerPage]
+	}
+
+	// If we filled a full page, there are likely more results
+	if len(collected) >= opts.PerPage && hasMore {
+		hasMore = true
+	} else if len(collected) < opts.PerPage {
+		hasMore = false
+	}
+
+	return collected, songCount, hasMore, nil
+}
+
+const urlValidationConcurrency = 50
+
+// validateURLs calls GetURL on each song concurrently (capped at
+// urlValidationConcurrency) and returns only songs with a valid
+// playback URL, populating BR and Size.
+func (n *Netease) validateURLs(songs []models.Song) []models.Song {
+	type indexed struct {
+		idx  int
+		song models.Song
+		ok   bool
+	}
+
+	sem := make(chan struct{}, urlValidationConcurrency)
+	ch := make(chan indexed, len(songs))
+	var wg sync.WaitGroup
+	for i, s := range songs {
+		wg.Add(1)
+		go func(idx int, song models.Song) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			res, err := n.GetURL(song.URLID)
+			if err != nil || res.URL == "" {
+				ch <- indexed{idx: idx, ok: false}
+				return
+			}
+			song.URL = &res.URL
+			song.BR = res.BR
+			song.Size = res.Size
+			ch <- indexed{idx: idx, song: song, ok: true}
+		}(i, s)
+	}
+	wg.Wait()
+	close(ch)
+
+	results := make([]indexed, 0, len(songs))
+	for r := range ch {
+		if r.ok {
+			results = append(results, r)
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool { return results[i].idx < results[j].idx })
+
+	out := make([]models.Song, len(results))
+	for i, r := range results {
+		out[i] = r.song
+	}
+	return out
 }
 
 // GetURL resolves a playable download URL for the given song ID.
