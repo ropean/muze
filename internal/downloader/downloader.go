@@ -138,6 +138,31 @@ func isTransient(err error) bool {
 	return false
 }
 
+// Result captures the outcome of a single download for batch summary reporting.
+type Result struct {
+	Path     string
+	Size     int64
+	Duration time.Duration
+	Err      error
+}
+
+// DownloadWithResult wraps Download and returns a Result with timing and file size.
+func DownloadWithResult(opts Options) Result {
+	start := time.Now()
+	err := Download(opts)
+	dur := time.Since(start)
+
+	if err != nil {
+		return Result{Path: opts.OutPath, Duration: dur, Err: err}
+	}
+
+	var size int64
+	if info, statErr := os.Stat(opts.OutPath); statErr == nil {
+		size = info.Size()
+	}
+	return Result{Path: opts.OutPath, Size: size, Duration: dur}
+}
+
 // FormatBytes returns a human-readable byte size string (e.g. "1.5 MB").
 func FormatBytes(b int64) string {
 	const unit = 1024

@@ -232,6 +232,52 @@ func TestDownload_UnknownContentLength(t *testing.T) {
 	}
 }
 
+func TestDownloadWithResult_Success(t *testing.T) {
+	content := "result test data"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(content))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "result.mp3")
+
+	res := DownloadWithResult(Options{URL: srv.URL, OutPath: outPath})
+	if res.Err != nil {
+		t.Fatalf("expected success, got: %v", res.Err)
+	}
+	if res.Path != outPath {
+		t.Errorf("path: got %q, want %q", res.Path, outPath)
+	}
+	if res.Size != int64(len(content)) {
+		t.Errorf("size: got %d, want %d", res.Size, len(content))
+	}
+	if res.Duration <= 0 {
+		t.Error("duration should be positive")
+	}
+}
+
+func TestDownloadWithResult_Failure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "fail.mp3")
+
+	res := DownloadWithResult(Options{URL: srv.URL, OutPath: outPath})
+	if res.Err == nil {
+		t.Fatal("expected error for 404")
+	}
+	if res.Path != outPath {
+		t.Errorf("path: got %q, want %q", res.Path, outPath)
+	}
+	if res.Duration <= 0 {
+		t.Error("duration should be positive even on failure")
+	}
+}
+
 func TestFormatBytes(t *testing.T) {
 	tests := []struct {
 		input int64

@@ -1,2 +1,52 @@
-# Build output (see Makefile)
+# Build output
 /muze
+/muze.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Downloads
+/downloads/
+
+# Test binary
+*.test
+
+# Go coverage
+*.out
+coverage.html
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Editors — VS Code / Cursor
+.vscode/
+.cursor/
+
+# Editors — JetBrains (GoLand, IntelliJ)
+.idea/
+*.iml
+
+# Editors — Vim / Neovim
+*.swp
+*.swo
+*~
+Session.vim
+
+# Editors — Emacs
+\#*\#
+.\#*
+
+# Editors — Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Docker
+docker-compose.override.yml
+
+# Environment
+.env
+.env.local

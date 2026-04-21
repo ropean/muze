@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"testing"
+
+	"github.com/ropean/muze/internal/models"
 )
 
 func TestRootHasAllSubcommands(t *testing.T) {
@@ -117,6 +119,51 @@ func TestUpgradeCmd_Flags(t *testing.T) {
 	}
 	if f.DefValue != "latest" {
 		t.Errorf("upgrade --version default: expected 'latest', got %s", f.DefValue)
+	}
+}
+
+func TestRootCmd_AcceptsOptionalKeyword(t *testing.T) {
+	if root.Args == nil {
+		t.Fatal("root command should have args validation")
+	}
+	if err := root.Args(root, []string{}); err != nil {
+		t.Errorf("root should accept zero args: %v", err)
+	}
+	if err := root.Args(root, []string{"keyword"}); err != nil {
+		t.Errorf("root should accept one arg: %v", err)
+	}
+	if err := root.Args(root, []string{"a", "b"}); err == nil {
+		t.Error("root should reject two args")
+	}
+}
+
+func TestRootCmd_DirFlag(t *testing.T) {
+	f := root.Flags().Lookup("dir")
+	if f == nil {
+		t.Fatal("root command missing flag --dir")
+	}
+	if f.Value.Type() != "string" {
+		t.Errorf("root --dir: expected type string, got %s", f.Value.Type())
+	}
+	if f.DefValue != "" {
+		t.Errorf("root --dir default: expected empty, got %q", f.DefValue)
+	}
+}
+
+func TestRootCmd_HasRunE(t *testing.T) {
+	if root.RunE == nil {
+		t.Fatal("root command should have RunE set for interactive mode")
+	}
+}
+
+func TestBuildSongOptions(t *testing.T) {
+	songs := []models.Song{
+		{Title: "Song A", Artist: "Artist A", Album: "Album A"},
+		{Title: "Song B", Artist: "Artist B"},
+	}
+	opts := buildSongOptions(songs)
+	if len(opts) != 2 {
+		t.Fatalf("expected 2 options, got %d", len(opts))
 	}
 }
 

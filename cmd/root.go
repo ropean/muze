@@ -9,9 +9,19 @@ import (
 )
 
 var root = &cobra.Command{
-	Use:               "muze",
+	Use:               "muze [keyword]",
 	Short:             "Cross-platform music search and download CLI",
+	Long:              "Run without a subcommand to enter interactive mode: search, select, and batch-download tracks.",
 	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
+	Args:              cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		keyword := ""
+		if len(args) > 0 {
+			keyword = args[0]
+		}
+		dir, _ := cmd.Flags().GetString("dir")
+		return runInteractive(keyword, dir)
+	},
 }
 
 // Execute is the entry point called from main.
@@ -22,6 +32,7 @@ func Execute() {
 }
 
 func init() {
+	root.Flags().String("dir", "", "Download directory (default: ./downloads/<keyword>)")
 	root.AddCommand(searchCmd, urlCmd, downloadCmd, serveCmd, versionCmd, checkUpdateCmd, upgradeCmd)
 }
 
