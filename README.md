@@ -74,7 +74,3 @@ git push origin v1.0.0
 You can also trigger a release manually from the GitHub Actions UI: go to **Actions → Release → Run workflow**, enter the tag (e.g. `v1.0.0`), and click **Run workflow**.
 
 Both methods build binaries for 6 platforms (linux/darwin/windows × amd64/arm64), generate SHA-256 checksums, and publish them to a GitHub Release.
-
-## Adapter integration
-
-[music-adapter](../music-adapter/) registers this project twice: channel `muze-http` (forwards to this HTTP server) and `muze-cli` (spawns the same binary per request). See `music-adapter/docs/channel-registry-guide.md`.
