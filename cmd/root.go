@@ -22,7 +22,7 @@ func Execute() {
 }
 
 func init() {
-	root.AddCommand(searchCmd, urlCmd, serveCmd, versionCmd, checkUpdateCmd, upgradeCmd)
+	root.AddCommand(searchCmd, urlCmd, downloadCmd, serveCmd, versionCmd, checkUpdateCmd, upgradeCmd)
 }
 
 // writeJSON writes v as indented JSON to stdout.

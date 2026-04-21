@@ -9,7 +9,9 @@ Go uses the `go` toolchain plus a small `Makefile` so you have one place for com
 | Task | Makefile | Plain `go` |
 |------|----------|------------|
 | Build | `make build` | `go build -o muze .` |
-| Test | `make test` | `go test -race ./...` |
+| Test (all) | `make test` | `go test -race ./...` |
+| Test (CLI only) | `make test-cli` | `go test -race ./cmd/... ./internal/api/... ./internal/downloader/... ./internal/models/...` |
+| Test (HTTP only) | `make test-http` | `go test -race ./internal/server/...` |
 | Format | `make fmt` | `gofmt -s -w .` and `go fmt ./...` |
 | Lint | `make lint` | `go vet ./...` |
 | Stricter lint | `make lint-full` | requires [golangci-lint](https://golangci-lint.run/) |
@@ -38,6 +40,7 @@ Set `MUZE_VERSION` to a tag like `v1.0.0` or `latest` (default).
 go build -o muze .
 ./muze search "keyword" [--page N] [--limit N] [--sources netease,tencent]
 ./muze url netease <id>
+./muze download netease <id> [--out path] [--title "..."] [--artist "..."] [--force]
 ./muze serve [--port 8010]
 ./muze version
 ./muze check-update

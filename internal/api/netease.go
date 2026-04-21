@@ -12,10 +12,8 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ropean/muze/internal/models"
@@ -116,16 +114,18 @@ func (n *Netease) searchPage(keyword string, page, perPage int) (songs []models.
 		})
 	}
 
-	// Netease hasMore is unreliable — treat a full page as "more available"
-	realHasMore := resp.Result.HasMore || len(out) >= perPage
+	// Derive hasMore from songCount + offset, which is more reliable than
+	// the API's hasMore flag (it keeps returning true past the last page).
+	fetched := (page-1)*perPage + len(out)
+	realHasMore := len(out) > 0 && fetched < resp.Result.SongCount
 
 	return out, resp.Result.SongCount, realHasMore, nil
 }
 
 // Search queries Netease Cloud Music for the given keyword.
-// Each song is validated via GetURL to ensure the result is playable;
-// unavailable songs are filtered out. The caller (worker) handles
-// pagination — this method fetches exactly one raw page per call.
+// Results are returned as-is without URL validation so that pagination
+// stays consistent with the upstream API. Callers should resolve
+// playable URLs on demand via GetURL.
 func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int, bool, error) {
 	if opts.PerPage == 0 {
 		opts.PerPage = 30
@@ -134,68 +134,7 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int
 		opts.Page = 1
 	}
 
-	raw, songCount, hasMore, err := n.searchPage(keyword, opts.Page, opts.PerPage)
-	if err != nil {
-		return nil, 0, false, err
-	}
-
-	if len(raw) == 0 {
-		return nil, songCount, false, nil
-	}
-
-	validated := n.validateURLs(raw)
-	return validated, songCount, hasMore, nil
-}
-
-const urlValidationConcurrency = 50
-
-// validateURLs calls GetURL on each song concurrently (capped at
-// urlValidationConcurrency) and returns only songs with a valid
-// playback URL, populating BR and Size.
-func (n *Netease) validateURLs(songs []models.Song) []models.Song {
-	type indexed struct {
-		idx  int
-		song models.Song
-		ok   bool
-	}
-
-	sem := make(chan struct{}, urlValidationConcurrency)
-	ch := make(chan indexed, len(songs))
-	var wg sync.WaitGroup
-	for i, s := range songs {
-		wg.Add(1)
-		go func(idx int, song models.Song) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			res, err := n.GetURL(song.URLID)
-			if err != nil || res.URL == "" {
-				ch <- indexed{idx: idx, ok: false}
-				return
-			}
-			song.URL = &res.URL
-			song.BR = res.BR
-			song.Size = res.Size
-			ch <- indexed{idx: idx, song: song, ok: true}
-		}(i, s)
-	}
-	wg.Wait()
-	close(ch)
-
-	results := make([]indexed, 0, len(songs))
-	for r := range ch {
-		if r.ok {
-			results = append(results, r)
-		}
-	}
-
-	sort.Slice(results, func(i, j int) bool { return results[i].idx < results[j].idx })
-
-	out := make([]models.Song, len(results))
-	for i, r := range results {
-		out[i] = r.song
-	}
-	return out
+	return n.searchPage(keyword, opts.Page, opts.PerPage)
 }
 
 // GetURL resolves a playable download URL for the given song ID.

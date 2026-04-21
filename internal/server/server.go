@@ -85,11 +85,11 @@ func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(v)
+	_ = enc.Encode(v)
 }
 
 func jsonError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(models.ErrorResponse{Error: msg})
+	_ = json.NewEncoder(w).Encode(models.ErrorResponse{Error: msg})
 }

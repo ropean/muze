@@ -150,7 +150,7 @@ func TestSongShape(t *testing.T) {
 	}
 	b, _ := json.Marshal(s)
 	var m map[string]any
-	json.Unmarshal(b, &m)
+	_ = json.Unmarshal(b, &m)
 
 	for _, key := range []string{"title", "artist", "album", "source", "url_id", "url", "pic_id", "lyric_id", "br", "size"} {
 		if _, ok := m[key]; !ok {
@@ -163,7 +163,7 @@ func TestURLResultShape(t *testing.T) {
 	r := models.URLResult{URL: "http://x", Size: 100, BR: 320000, Source: "netease", ID: "1"}
 	b, _ := json.Marshal(r)
 	var m map[string]any
-	json.Unmarshal(b, &m)
+	_ = json.Unmarshal(b, &m)
 
 	for _, key := range []string{"url", "size", "br", "source", "id"} {
 		if _, ok := m[key]; !ok {
