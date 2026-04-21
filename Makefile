@@ -3,10 +3,12 @@
 
 .PHONY: build test fmt lint vet clean
 
-BINARY_NAME ?= music-provider-cn
+BINARY_NAME ?= muze
+VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS     := -s -w -X github.com/ropean/muze/internal/selfupdate.Version=$(VERSION)
 
 build:
-	go build -o $(BINARY_NAME) .
+	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME) .
 
 test:
 	go test -race ./...

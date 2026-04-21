@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ropean/music-provider-cn/internal/api"
-	"github.com/ropean/music-provider-cn/internal/server"
+	"github.com/ropean/muze/internal/api"
+	"github.com/ropean/muze/internal/server"
 )
 
 func newTestServer() *httptest.Server {

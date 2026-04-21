@@ -1,4 +1,4 @@
-# music-provider-cn roadmap
+# muze roadmap
 
 ## Goals
 
@@ -9,7 +9,7 @@
 ## Layout
 
 ```
-music-provider-cn/
+muze/
 ├── cmd/
 │   └── root.go              # cobra CLI entry
 ├── internal/
@@ -45,8 +45,8 @@ music-provider-cn/
 ## JSON examples
 
 ```bash
-music-provider-cn search "keyword" --sources netease
-music-provider-cn url netease <id>
+muze search "keyword" --sources netease
+muze url netease <id>
 ```
 
 ## Phases

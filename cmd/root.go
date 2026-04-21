@@ -9,7 +9,7 @@ import (
 )
 
 var root = &cobra.Command{
-	Use:               "music-provider-cn",
+	Use:               "muze",
 	Short:             "Cross-platform music search and download CLI",
 	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 }
@@ -22,7 +22,7 @@ func Execute() {
 }
 
 func init() {
-	root.AddCommand(searchCmd, urlCmd, serveCmd)
+	root.AddCommand(searchCmd, urlCmd, serveCmd, versionCmd, checkUpdateCmd, upgradeCmd)
 }
 
 // writeJSON writes v as indented JSON to stdout.

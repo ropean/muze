@@ -1,4 +1,4 @@
-module github.com/ropean/music-provider-cn
+module github.com/ropean/muze
 
 go 1.24.7
 

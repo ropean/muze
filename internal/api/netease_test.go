@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ropean/music-provider-cn/internal/api"
-	"github.com/ropean/music-provider-cn/internal/models"
+	"github.com/ropean/muze/internal/api"
+	"github.com/ropean/muze/internal/models"
 )
 
 func TestNeteaseSearch_LiuDehua(t *testing.T) {

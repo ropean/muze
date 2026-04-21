@@ -1,4 +1,4 @@
-# music-provider-cn
+# muze
 
 Go service and CLI for searching Chinese music platforms and resolving playback URLs. It implements the [music-adapter source provider contract](../music-adapter/docs/source-provider-guide.md): HTTP (`serve`) or CLI (`search` / `url`).
 
@@ -8,7 +8,7 @@ Go uses the `go` toolchain plus a small `Makefile` so you have one place for com
 
 | Task | Makefile | Plain `go` |
 |------|----------|------------|
-| Build | `make build` | `go build -o music-provider-cn .` |
+| Build | `make build` | `go build -o muze .` |
 | Test | `make test` | `go test -race ./...` |
 | Format | `make fmt` | `gofmt -s -w .` and `go fmt ./...` |
 | Lint | `make lint` | `go vet ./...` |
@@ -16,13 +16,32 @@ Go uses the `go` toolchain plus a small `Makefile` so you have one place for com
 
 Other common patterns in the ecosystem: [Mage](https://magefile.org/) (Go-based task files), [Task](https://taskfile.dev/) (YAML runner, like Make with nicer syntax), or shell scripts — there is no single built-in `package.json` equivalent; **`go` + `Makefile` is the most common convention**.
 
+## Install
+
+Download a pre-built binary from [GitHub Releases](https://github.com/ropean/muze/releases):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ropean/muze/main/install.sh | bash
+```
+
+Pin a specific version:
+
+```bash
+MUZE_VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/ropean/muze/main/install.sh | bash
+```
+
+Set `MUZE_VERSION` to a tag like `v1.0.0` or `latest` (default).
+
 ## CLI
 
 ```bash
-go build -o music-provider-cn .
-./music-provider-cn search "keyword" [--page N] [--limit N] [--sources netease,tencent]
-./music-provider-cn url netease <id>
-./music-provider-cn serve [--port 8010]
+go build -o muze .
+./muze search "keyword" [--page N] [--limit N] [--sources netease,tencent]
+./muze url netease <id>
+./muze serve [--port 8010]
+./muze version
+./muze check-update
+./muze upgrade [--version v1.0.0]
 ```
 
 ## HTTP
@@ -36,10 +55,10 @@ go build -o music-provider-cn .
 ## Docker
 
 ```bash
-docker build -t music-provider-cn .
-docker run --rm -p 8010:8010 music-provider-cn
+docker build -t muze .
+docker run --rm -p 8010:8010 muze
 ```
 
 ## Adapter integration
 
-[music-adapter](../music-adapter/) registers this project twice: channel `music-provider-cn-http` (forwards to this HTTP server) and `music-provider-cn-cli` (spawns the same binary per request). See `music-adapter/docs/channel-registry-guide.md`.
+[music-adapter](../music-adapter/) registers this project twice: channel `muze-http` (forwards to this HTTP server) and `muze-cli` (spawns the same binary per request). See `music-adapter/docs/channel-registry-guide.md`.

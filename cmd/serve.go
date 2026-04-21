@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/ropean/music-provider-cn/internal/api"
-	"github.com/ropean/music-provider-cn/internal/server"
+	"github.com/ropean/muze/internal/api"
+	"github.com/ropean/muze/internal/server"
 	"github.com/spf13/cobra"
 )
 

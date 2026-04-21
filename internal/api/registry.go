@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ropean/music-provider-cn/internal/models"
+	"github.com/ropean/muze/internal/models"
 )
 
 // Registry holds all registered MusicSource implementations and provides

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/ropean/music-provider-cn/internal/api"
+	"github.com/ropean/muze/internal/api"
 	"github.com/spf13/cobra"
 )
 
