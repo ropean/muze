@@ -1,6 +1,6 @@
 # muze
 
-Go service and CLI for searching Chinese music platforms and resolving playback URLs. It implements the [music-adapter source provider contract](../music-adapter/docs/source-provider-guide.md): HTTP (`serve`) or CLI (`search` / `url`).
+Go service and CLI for searching Chinese music platforms and resolving playback URLs. It implements HTTP (`serve`) or CLI (`search` / `url`).
 
 ## Commands (like npm scripts)
 
