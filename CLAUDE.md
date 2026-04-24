@@ -25,6 +25,16 @@ When the user confirms a selection, `GetURL` is called once per track immediatel
 
 Currently only **netease** is registered. Other sources (kugou, kuwo, qq) were explored but their APIs are unreliable from outside China and depend on fragile third-party proxies (cenguigui.cn, vkeys.cn) — not included for now.
 
+## API Compatibility
+
+Interface methods that take an options struct use variadic parameters for backward compatibility:
+
+```go
+GetURL(id string, opts ...URLOptions) (models.URLResult, error)
+```
+
+Callers may pass zero or one `opts` value. Zero means "use defaults". This allows adding new options fields without forcing every caller to update. **All new optional parameters on existing interface methods must follow this pattern.**
+
 ## LyricsSource
 
 `GetLyrics` is an optional interface. Only sources that implement it appear in `/lyrics`. Currently: netease only.

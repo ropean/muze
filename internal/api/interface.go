@@ -20,7 +20,7 @@ type MusicSource interface {
 	// Search returns matched songs plus total count and hasMore flag.
 	Search(keyword string, opts SearchOptions) (songs []models.Song, total int, hasMore bool, err error)
 	// GetURL resolves a full URLResult for the given track ID.
-	GetURL(id string, opts URLOptions) (models.URLResult, error)
+	GetURL(id string, opts ...URLOptions) (models.URLResult, error)
 }
 
 // LyricsSource is an optional interface for sources that support lyric fetching.

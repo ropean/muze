@@ -236,8 +236,12 @@ func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int
 // GetURL resolves a playable download URL for the given song ID.
 // It tries the official weapi first (with requested quality), then falls back
 // to the CGG third-party API if the official API returns an empty URL.
-func (n *Netease) GetURL(id string, opts URLOptions) (models.URLResult, error) {
-	br := neteasebrForQuality(opts.Quality)
+func (n *Netease) GetURL(id string, opts ...URLOptions) (models.URLResult, error) {
+	var o URLOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	br := neteasebrForQuality(o.Quality)
 	payload := map[string]any{
 		"ids": []string{id},
 		"br":  br,
@@ -246,7 +250,7 @@ func (n *Netease) GetURL(id string, opts URLOptions) (models.URLResult, error) {
 	body, err := n.weapi("/weapi/song/enhance/player/url", payload)
 	if err != nil {
 		// weapi network failure — go straight to fallback
-		return n.getURLFallback(id, opts.Quality)
+		return n.getURLFallback(id, o.Quality)
 	}
 
 	var resp struct {
@@ -262,7 +266,7 @@ func (n *Netease) GetURL(id string, opts URLOptions) (models.URLResult, error) {
 		Code int `json:"code"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil || resp.Code != 200 || len(resp.Data) == 0 {
-		return n.getURLFallback(id, opts.Quality)
+		return n.getURLFallback(id, o.Quality)
 	}
 
 	d := resp.Data[0]
@@ -272,14 +276,14 @@ func (n *Netease) GetURL(id string, opts URLOptions) (models.URLResult, error) {
 	}
 	if resolvedURL == "" {
 		// Song blocked/VIP — try fallback before giving up
-		return n.getURLFallback(id, opts.Quality)
+		return n.getURLFallback(id, o.Quality)
 	}
 
 	return models.URLResult{
 		URL:     resolvedURL,
 		Size:    d.Size,
 		BR:      d.BR,
-		Quality: opts.Quality,
+		Quality: o.Quality,
 		Source:  "netease",
 		ID:      id,
 	}, nil
