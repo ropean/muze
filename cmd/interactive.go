@@ -5,11 +5,13 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/ropean/muze/internal/api"
 	"github.com/ropean/muze/internal/config"
@@ -137,22 +139,24 @@ func buildSongOptions(songs []models.Song) []huh.Option[int] {
 
 	opts := make([]huh.Option[int], len(songs))
 	for i, s := range songs {
-		fmtStr  := formatLabel(s.BR)
-		sizeStr := sizeLabel(s.Size)
+		fmtStr := formatLabel(s.BR)
 
+		// Format: label colored, trailing pad uncolored → Size always at fixed offset.
+		// Format labels are all ASCII so len == visual width.
 		var meta string
 		if fmtStr != "" {
-			meta = fmtStyle.Render(fmtStr) + "  " + sizeStyle.Render(sizeStr)
+			fmtTrail  := strings.Repeat(" ", 8-len(fmtStr))
+			sizePadded := fmt.Sprintf("%5.1f MB", float64(s.Size)/(1024*1024))
+			meta = fmtStyle.Render(fmtStr) + fmtTrail + "  " + sizeStyle.Render(sizePadded)
 		} else {
-			meta = naStyle.Render("--")
+			meta = naStyle.Render("--") + strings.Repeat(" ", 6) + "  " + naStyle.Render("    --   ")
 		}
 
-		label := fmt.Sprintf("%-36s  %-20s  %-18s  %s",
-			titleStyle.Render(truncate(s.Title, 18)),
-			artistStyle.Render(truncate(s.Artist, 12)),
-			albumStyle.Render(truncate(s.Album, 12)),
-			meta,
-		)
+		title  := titleStyle.Render(padRight(truncateWidth(s.Title, 20), 20))
+		artist := artistStyle.Render(padRight(truncateWidth(s.Artist, 16), 16))
+		album  := albumStyle.Render(padRight(truncateWidth(s.Album, 16), 16))
+
+		label := title + "  " + artist + "  " + album + "  " + meta
 		opts[i] = huh.NewOption(label, i)
 	}
 	return opts
@@ -182,12 +186,32 @@ func sizeLabel(bytes int) string {
 	return fmt.Sprintf("%.1f MB", float64(bytes)/(1024*1024))
 }
 
-func truncate(s string, max int) string {
-	runes := []rune(s)
-	if len(runes) <= max {
+// truncateWidth truncates s to at most maxWidth terminal columns (CJK=2, others=1).
+// Reserves 1 column for the "…" so the result never exceeds maxWidth.
+func truncateWidth(s string, maxWidth int) string {
+	if runewidth.StringWidth(s) <= maxWidth {
 		return s
 	}
-	return string(runes[:max-1]) + "…"
+	const ellipsis = "…"
+	ellipsisW := runewidth.StringWidth(ellipsis)
+	w := 0
+	for i, r := range s {
+		rw := runewidth.RuneWidth(r)
+		if w+rw > maxWidth-ellipsisW {
+			return s[:i] + ellipsis
+		}
+		w += rw
+	}
+	return s
+}
+
+// padRight pads s with spaces to exactly width terminal columns.
+func padRight(s string, width int) string {
+	w := runewidth.StringWidth(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
 }
 
 type trackJob struct {

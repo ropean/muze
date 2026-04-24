@@ -12,8 +12,11 @@ All notable changes to this project will be documented in this file.
 - `url` command: `--quality` flag
 - `download` command: `--quality` flag and `--lyrics` flag (saves `.lrc` alongside audio)
 - Interactive TUI: search results now show Format (FLAC / MP3 320k / 128k) and Size (MB) columns, extracted from search metadata — no extra API call
+- Interactive TUI: columns auto-align with CJK-aware width (Chinese characters = 2 terminal columns)
 - Interactive TUI: `--theme` flag to select UI theme (`base16` / `tech` / `charm` / `dracula` / `catppuccin`)
 - Interactive TUI: `--dir` and `--theme` values are saved to `config.json` and reused across sessions
+- HTTP server: startup now lists all endpoints with auto-aligned columns; adding a route updates the display automatically
+- `make serve` target for quick local server start
 - OpenAPI 3.1 spec (`openapi.yaml`)
 
 ### Fixed

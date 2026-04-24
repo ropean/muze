@@ -9,13 +9,43 @@ import (
 	"github.com/ropean/muze/internal/models"
 )
 
+// routeDef describes a single HTTP endpoint.
+type routeDef struct {
+	method  string
+	path    string
+	params  []string // display-only param tokens, each becomes its own aligned column
+	handler func(*api.Registry) http.HandlerFunc
+}
+
+var routeDefs = []routeDef{
+	{"GET", "/search", []string{"q=<keyword>", "[page=1]", "[limit=50]", "[sources=netease]"}, handleSearch},
+	{"GET", "/url", []string{"source=<src>", "id=<id>", "[quality=flac|320k|128k]"}, handleURL},
+	{"GET", "/lyrics", []string{"source=<src>", "id=<id>"}, handleLyrics},
+	{"GET", "/health", nil, func(_ *api.Registry) http.HandlerFunc { return handleHealth }},
+}
+
+// RouteInfo is a single route summary for display at startup.
+type RouteInfo struct {
+	Method string
+	Path   string
+	Params []string
+}
+
+// Routes returns the registered endpoints for display.
+func Routes() []RouteInfo {
+	out := make([]RouteInfo, len(routeDefs))
+	for i, r := range routeDefs {
+		out[i] = RouteInfo{r.method, r.path, r.params}
+	}
+	return out
+}
+
 // New returns an http.Handler that implements the provider contract.
 func New(reg *api.Registry) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/search", handleSearch(reg))
-	mux.HandleFunc("/url", handleURL(reg))
-	mux.HandleFunc("/lyrics", handleLyrics(reg))
-	mux.HandleFunc("/health", handleHealth)
+	for _, r := range routeDefs {
+		mux.HandleFunc(r.path, r.handler(reg))
+	}
 	return mux
 }
 

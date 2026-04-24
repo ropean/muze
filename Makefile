@@ -1,7 +1,7 @@
 # Go project tasks — similar role to npm scripts in Node (single entry: `make <target>`).
 # Optional: install https://taskfile.dev or github.com/go-task/task for YAML-style tasks.
 
-.PHONY: help build test test-cli test-http fmt lint vet clean
+.PHONY: help build serve test test-cli test-http fmt lint vet clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -19,6 +19,9 @@ endif
 
 build: ## Build the binary
 	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME)$(EXT) .
+
+serve: ## Run HTTP server (default port 8010)
+	go run . serve
 
 test: ## Run all tests
 	go test -race ./...
