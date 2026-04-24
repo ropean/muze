@@ -29,7 +29,7 @@ Currently only **netease** is registered. Other sources (kugou, kuwo, qq) were e
 
 **Rule: never break existing callers when evolving interfaces.**
 
-- Optional parameters on any interface method must use variadic form: `opts ...FooOptions`. Callers that pass nothing still compile; callers that pass a value still compile.
+- Optional parameters on any interface method must use variadic form: `opts ...FooOptions`. Callers that pass nothing still compile; callers that pass a value still compile. Default values are applied inside the implementation (not the interface): `Search` defaults to Page=1, PerPage=50.
 - Adding a new field to an existing options struct is always safe (zero value = old behavior).
 - Removing or renaming a method, or changing required parameter types, requires updating every caller in the same commit.
 

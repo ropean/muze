@@ -223,14 +223,18 @@ func (n *Netease) searchLegacy(params url.Values) ([]models.Song, int, bool, err
 }
 
 // Search queries Netease Cloud Music for the given keyword.
-func (n *Netease) Search(keyword string, opts SearchOptions) ([]models.Song, int, bool, error) {
-	if opts.PerPage == 0 {
-		opts.PerPage = 30
+func (n *Netease) Search(keyword string, opts ...SearchOptions) ([]models.Song, int, bool, error) {
+	var o SearchOptions
+	if len(opts) > 0 {
+		o = opts[0]
 	}
-	if opts.Page == 0 {
-		opts.Page = 1
+	if o.Page == 0 {
+		o.Page = 1
 	}
-	return n.searchPage(keyword, opts.Page, opts.PerPage)
+	if o.PerPage == 0 {
+		o.PerPage = 50
+	}
+	return n.searchPage(keyword, o.Page, o.PerPage)
 }
 
 // GetURL resolves a playable download URL for the given song ID.
