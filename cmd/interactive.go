@@ -17,6 +17,16 @@ import (
 
 const downloadWorkers = 3
 
+// Tech color palette
+var (
+	colorCyan   = lipgloss.Color("#00D7FF")
+	colorGreen  = lipgloss.Color("#00FF87")
+	colorDim    = lipgloss.Color("#4A4A6A")
+	colorWhite  = lipgloss.Color("#E0E0FF")
+	colorRed    = lipgloss.Color("#FF5555")
+	colorYellow = lipgloss.Color("#FFD700")
+)
+
 func runInteractive(keyword, dir string) error {
 	if keyword == "" {
 		err := huh.NewInput().
@@ -37,7 +47,8 @@ func runInteractive(keyword, dir string) error {
 
 	reg := api.NewRegistry()
 
-	fmt.Fprintf(os.Stderr, "\nSearching for %q ...\n\n", keyword)
+	searchLabel := lipgloss.NewStyle().Foreground(colorCyan).Bold(true).Render("▶")
+	fmt.Fprintf(os.Stderr, "\n%s Searching %q ...\n\n", searchLabel, keyword)
 
 	result, err := reg.Search(api.SearchRequest{
 		Keyword: keyword,
@@ -48,17 +59,18 @@ func runInteractive(keyword, dir string) error {
 		return fmt.Errorf("search failed: %w", err)
 	}
 	if len(result.Songs) == 0 {
-		fmt.Fprintln(os.Stderr, "No results found.")
+		fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Foreground(colorYellow).Render("No results found."))
 		return nil
 	}
 
 	options := buildSongOptions(result.Songs)
 
+	titleStyle := lipgloss.NewStyle().Foreground(colorCyan).Bold(true)
 	var selected []int
 	err = huh.NewMultiSelect[int]().
-		Title(fmt.Sprintf("Found %d tracks (space=toggle, ctrl+a=all, enter=confirm)", len(result.Songs))).
+		Title(titleStyle.Render(fmt.Sprintf("Found %d tracks  (space=toggle  ctrl+a=all  enter=confirm)", len(result.Songs)))).
 		Options(options...).
-		Height(20).
+		Height(22).
 		Value(&selected).
 		Run()
 	if err != nil {
@@ -66,7 +78,7 @@ func runInteractive(keyword, dir string) error {
 	}
 
 	if len(selected) == 0 {
-		fmt.Fprintln(os.Stderr, "No tracks selected.")
+		fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Foreground(colorDim).Render("No tracks selected."))
 		return nil
 	}
 
@@ -81,7 +93,9 @@ func runInteractive(keyword, dir string) error {
 	}
 	outDir := filepath.Join(baseDir, downloader.SanitizeFilename(keyword))
 
-	fmt.Fprintf(os.Stderr, "\nDownloading %d tracks to %s\n\n", len(songs), outDir)
+	fmt.Fprintf(os.Stderr, "\n%s Downloading %d track(s) → %s\n\n",
+		lipgloss.NewStyle().Foreground(colorGreen).Bold(true).Render("▶"),
+		len(songs), outDir)
 
 	results := batchDownload(reg, songs, outDir)
 	printSummary(results)
@@ -90,19 +104,70 @@ func runInteractive(keyword, dir string) error {
 }
 
 func buildSongOptions(songs []models.Song) []huh.Option[int] {
-	titleStyle := lipgloss.NewStyle().Bold(true)
-	artistStyle := lipgloss.NewStyle().Faint(true)
-	albumStyle := lipgloss.NewStyle().Faint(true).Italic(true)
+	titleStyle  := lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
+	artistStyle := lipgloss.NewStyle().Foreground(colorCyan)
+	albumStyle  := lipgloss.NewStyle().Foreground(colorDim)
+	fmtStyle    := lipgloss.NewStyle().Foreground(colorGreen)
+	sizeStyle   := lipgloss.NewStyle().Foreground(colorDim)
+	naStyle     := lipgloss.NewStyle().Foreground(colorDim)
 
 	opts := make([]huh.Option[int], len(songs))
 	for i, s := range songs {
-		label := fmt.Sprintf("%s  %s", titleStyle.Render(s.Title), artistStyle.Render(s.Artist))
-		if s.Album != "" {
-			label += fmt.Sprintf("  %s", albumStyle.Render("["+s.Album+"]"))
+		fmtStr  := formatLabel(s.BR)
+		sizeStr := sizeLabel(s.Size)
+
+		var meta string
+		if fmtStr != "" {
+			meta = fmtStyle.Render(fmtStr) + "  " + sizeStyle.Render(sizeStr)
+		} else {
+			meta = naStyle.Render("--")
 		}
+
+		label := fmt.Sprintf("%-36s  %-20s  %-18s  %s",
+			titleStyle.Render(truncate(s.Title, 18)),
+			artistStyle.Render(truncate(s.Artist, 12)),
+			albumStyle.Render(truncate(s.Album, 12)),
+			meta,
+		)
 		opts[i] = huh.NewOption(label, i)
 	}
 	return opts
+}
+
+// formatLabel returns a human-readable format string derived from bitrate.
+func formatLabel(br int) string {
+	switch {
+	case br >= 800000:
+		return "FLAC"
+	case br >= 300000:
+		return "MP3 320k"
+	case br >= 180000:
+		return "MP3 192k"
+	case br >= 100000:
+		return "MP3 128k"
+	case br > 0:
+		return "MP3"
+	default:
+		return ""
+	}
+}
+
+// sizeLabel returns size in MB with one decimal place.
+func sizeLabel(bytes int) string {
+	if bytes <= 0 {
+		return "--"
+	}
+	mb := float64(bytes) / (1024 * 1024)
+	return fmt.Sprintf("%.1f MB", mb)
+}
+
+// truncate shortens s to max runes, appending … if cut.
+func truncate(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max-1]) + "…"
 }
 
 type trackJob struct {
@@ -115,9 +180,10 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string) []down
 	jobs := make(chan trackJob, len(songs))
 	var wg sync.WaitGroup
 
-	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	dimStyle := lipgloss.NewStyle().Faint(true)
+	okStyle   := lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+	failStyle := lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+	dimStyle  := lipgloss.NewStyle().Foreground(colorDim)
+	nameStyle := lipgloss.NewStyle().Foreground(colorWhite)
 
 	var mu sync.Mutex
 
@@ -131,8 +197,10 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string) []down
 				outPath := filepath.Join(outDir, filename)
 
 				mu.Lock()
-				fmt.Fprintf(os.Stderr, "  [%d/%d] %s - %s ... ",
-					job.idx+1, len(songs), s.Title, s.Artist)
+				fmt.Fprintf(os.Stderr, "  [%d/%d] %s  %s",
+					job.idx+1, len(songs),
+					nameStyle.Render(s.Title),
+					dimStyle.Render("— "+s.Artist+" ..."))
 				mu.Unlock()
 
 				urlResult, err := reg.GetURL(s.Source, s.URLID, api.URLOptions{})
@@ -140,7 +208,7 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string) []down
 					res := downloader.Result{Path: outPath, Err: fmt.Errorf("resolve url: %w", err)}
 					results[job.idx] = res
 					mu.Lock()
-					fmt.Fprintln(os.Stderr, failStyle.Render("FAIL")+" "+dimStyle.Render(err.Error()))
+					fmt.Fprintln(os.Stderr, "  "+failStyle.Render("FAIL")+"  "+dimStyle.Render(err.Error()))
 					mu.Unlock()
 					continue
 				}
@@ -154,11 +222,12 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string) []down
 
 				mu.Lock()
 				if res.Err != nil {
-					fmt.Fprintln(os.Stderr, failStyle.Render("FAIL")+" "+dimStyle.Render(res.Err.Error()))
+					fmt.Fprintln(os.Stderr, "  "+failStyle.Render("FAIL")+"  "+dimStyle.Render(res.Err.Error()))
 				} else {
-					fmt.Fprintln(os.Stderr, successStyle.Render("OK")+
-						" "+dimStyle.Render(fmt.Sprintf("%s in %s",
-						downloader.FormatBytes(res.Size), res.Duration.Round(time.Millisecond))))
+					fmt.Fprintln(os.Stderr, "  "+okStyle.Render("OK")+"  "+
+						dimStyle.Render(fmt.Sprintf("%s  %s",
+							downloader.FormatBytes(res.Size),
+							res.Duration.Round(time.Millisecond))))
 				}
 				mu.Unlock()
 			}
@@ -189,28 +258,29 @@ func printSummary(results []downloader.Result) {
 		}
 	}
 
-	headerStyle := lipgloss.NewStyle().Bold(true).Underline(true)
-	okStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	dimStyle := lipgloss.NewStyle().Faint(true)
+	header  := lipgloss.NewStyle().Foreground(colorCyan).Bold(true).Underline(true)
+	okStyle := lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+	errStyle := lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
 
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, headerStyle.Render("Download Summary"))
-	fmt.Fprintf(os.Stderr, "  Total:    %d tracks\n", len(results))
-	fmt.Fprintf(os.Stderr, "  Success:  %s\n", okStyle.Render(fmt.Sprintf("%d", success)))
+	fmt.Fprintln(os.Stderr, header.Render("Download Summary"))
+	fmt.Fprintf(os.Stderr, "  Total    %d\n", len(results))
+	fmt.Fprintf(os.Stderr, "  Success  %s\n", okStyle.Render(fmt.Sprintf("%d", success)))
 	if fail > 0 {
-		fmt.Fprintf(os.Stderr, "  Failed:   %s\n", errStyle.Render(fmt.Sprintf("%d", fail)))
+		fmt.Fprintf(os.Stderr, "  Failed   %s\n", errStyle.Render(fmt.Sprintf("%d", fail)))
 	}
-	fmt.Fprintf(os.Stderr, "  Size:     %s\n", downloader.FormatBytes(totalSize))
-	fmt.Fprintf(os.Stderr, "  Elapsed:  %s\n", dimStyle.Render(totalDur.Round(time.Millisecond).String()))
+	fmt.Fprintf(os.Stderr, "  Size     %s\n", dimStyle.Render(downloader.FormatBytes(totalSize)))
+	fmt.Fprintf(os.Stderr, "  Elapsed  %s\n", dimStyle.Render(totalDur.Round(time.Millisecond).String()))
 
 	if fail > 0 {
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, errStyle.Render("Failed tracks:"))
+		fmt.Fprintln(os.Stderr, errStyle.Render("Failed:"))
 		for _, r := range results {
 			if r.Err != nil {
-				fmt.Fprintf(os.Stderr, "  - %s: %s\n",
-					filepath.Base(r.Path), dimStyle.Render(r.Err.Error()))
+				fmt.Fprintf(os.Stderr, "  %s  %s\n",
+					lipgloss.NewStyle().Foreground(colorRed).Render("✗"),
+					dimStyle.Render(filepath.Base(r.Path)+": "+r.Err.Error()))
 			}
 		}
 	}

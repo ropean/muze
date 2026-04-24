@@ -85,6 +85,10 @@ func (n *Netease) searchCloudSearch(params url.Values) ([]models.Song, int, bool
 		return nil, 0, false, err
 	}
 
+	type qualityInfo struct {
+		BR   int `json:"br"`
+		Size int `json:"size"`
+	}
 	var resp struct {
 		Result struct {
 			Songs []struct {
@@ -98,6 +102,9 @@ func (n *Netease) searchCloudSearch(params url.Values) ([]models.Song, int, bool
 					PicURL string `json:"picUrl"`
 					PicStr string `json:"pic_str"`
 				} `json:"al"`
+				Sq *qualityInfo `json:"sq"` // lossless (FLAC)
+				H  *qualityInfo `json:"h"`  // high (320k MP3)
+				L  *qualityInfo `json:"l"`  // low (128k MP3)
 			} `json:"songs"`
 			SongCount int `json:"songCount"`
 		} `json:"result"`
@@ -121,6 +128,18 @@ func (n *Netease) searchCloudSearch(params url.Values) ([]models.Song, int, bool
 			artists[i] = a.Name
 		}
 		idStr := strconv.Itoa(s.ID)
+
+		// Pick best available quality for metadata display (sq > h > l).
+		var br, size int
+		switch {
+		case s.Sq != nil && s.Sq.BR > 0:
+			br, size = s.Sq.BR, s.Sq.Size
+		case s.H != nil && s.H.BR > 0:
+			br, size = s.H.BR, s.H.Size
+		case s.L != nil && s.L.BR > 0:
+			br, size = s.L.BR, s.L.Size
+		}
+
 		out = append(out, models.Song{
 			Title:   s.Name,
 			Artist:  strings.Join(artists, " / "),
@@ -130,6 +149,8 @@ func (n *Netease) searchCloudSearch(params url.Values) ([]models.Song, int, bool
 			PicID:   s.Al.PicStr,
 			PicURL:  s.Al.PicURL,
 			LyricID: idStr,
+			BR:      br,
+			Size:    size,
 		})
 	}
 
