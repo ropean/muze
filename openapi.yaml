@@ -1,0 +1,299 @@
+openapi: "3.1.0"
+
+info:
+  title: Muze
+  description: Chinese music search and playback URL resolver.
+  version: "0.0.2"
+
+servers:
+  - url: http://localhost:8080
+    description: Local server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /search:
+    get:
+      summary: Search tracks
+      operationId: search
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search keyword
+          schema:
+            type: string
+          example: 刘德华
+        - name: sources
+          in: query
+          required: false
+          description: Comma-separated source names. Omit to query all sources.
+          schema:
+            type: string
+          example: netease
+        - name: page
+          in: query
+          required: false
+          description: Page number (1-based, default 1)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: Results per page (default 30)
+          schema:
+            type: integer
+            minimum: 1
+            default: 30
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /url:
+    get:
+      summary: Resolve playback URL
+      operationId: getURL
+      parameters:
+        - name: source
+          in: query
+          required: true
+          description: Source name (e.g. netease)
+          schema:
+            type: string
+          example: netease
+        - name: id
+          in: query
+          required: true
+          description: Track ID (url_id from search results)
+          schema:
+            type: string
+          example: "110191"
+        - name: quality
+          in: query
+          required: false
+          description: Audio quality. Defaults to highest available.
+          schema:
+            type: string
+            enum: [flac, 320k, 128k]
+      responses:
+        "200":
+          description: Resolved playback URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/URLResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /lyrics:
+    get:
+      summary: Fetch lyrics
+      operationId: getLyrics
+      description: Only supported by sources that implement the LyricsSource interface (currently netease).
+      parameters:
+        - name: source
+          in: query
+          required: true
+          description: Source name
+          schema:
+            type: string
+          example: netease
+        - name: id
+          in: query
+          required: true
+          description: Track ID (lyric_id from search results)
+          schema:
+            type: string
+          example: "110191"
+      responses:
+        "200":
+          description: LRC-format lyrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LyricsResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+components:
+  schemas:
+    Song:
+      type: object
+      required: [title, artist, album, source, url_id, url, pic_id, lyric_id]
+      properties:
+        title:
+          type: string
+          example: 暗里着迷
+        artist:
+          type: string
+          example: 刘德华
+        album:
+          type: string
+          example: 经典重现
+        source:
+          type: string
+          example: netease
+        url_id:
+          type: string
+          example: "110191"
+        url:
+          type: ["string", "null"]
+          description: Populated only after URL resolution; null in search results.
+          example: null
+        pic_id:
+          type: string
+          example: "109951163031587156"
+        pic_url:
+          type: string
+          description: Direct artwork URL, when available.
+          example: http://p1.music.126.net/xxx.jpg
+        lyric_id:
+          type: string
+          example: "110191"
+        br:
+          type: integer
+          description: Bitrate in bps, when exposed by the source.
+          example: 320000
+        size:
+          type: integer
+          description: File size in bytes, when exposed by the source.
+          example: 9188876
+
+    SearchMeta:
+      type: object
+      required: [keyword, sources, page, limit, total, hasMore]
+      properties:
+        keyword:
+          type: string
+          example: 刘德华
+        sources:
+          type: array
+          items:
+            type: string
+          example: [netease]
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 30
+        total:
+          type: integer
+          example: 290
+        hasMore:
+          type: boolean
+          example: true
+
+    SearchResult:
+      type: object
+      required: [songs, meta]
+      properties:
+        songs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Song"
+        meta:
+          $ref: "#/components/schemas/SearchMeta"
+
+    URLResult:
+      type: object
+      required: [url, size, br, source, id]
+      properties:
+        url:
+          type: string
+          example: http://m801.music.126.net/xxx.mp3
+        size:
+          type: integer
+          description: File size in bytes
+          example: 9188876
+        br:
+          type: integer
+          description: Bitrate in bps
+          example: 320000
+        quality:
+          type: string
+          enum: [flac, 320k, 128k]
+          example: 320k
+        source:
+          type: string
+          example: netease
+        id:
+          type: string
+          example: "110191"
+
+    LyricsResult:
+      type: object
+      required: [lyrics, source, id]
+      properties:
+        lyrics:
+          type: string
+          description: LRC-format lyrics
+          example: "[00:01.00] 暗里着迷"
+        source:
+          type: string
+          example: netease
+        id:
+          type: string
+          example: "110191"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: missing required parameter: q
+
+  responses:
+    BadRequest:
+      description: Missing or invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    MethodNotAllowed:
+      description: HTTP method not allowed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadGateway:
+      description: Upstream source error or track not available
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
