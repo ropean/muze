@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,23 +12,44 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/ropean/muze/internal/api"
+	"github.com/ropean/muze/internal/config"
 	"github.com/ropean/muze/internal/downloader"
 	"github.com/ropean/muze/internal/models"
 )
 
 const downloadWorkers = 3
 
-// Tech color palette
-var (
-	colorCyan   = lipgloss.Color("#00D7FF")
-	colorGreen  = lipgloss.Color("#00FF87")
-	colorDim    = lipgloss.Color("#4A4A6A")
-	colorWhite  = lipgloss.Color("#E0E0FF")
-	colorRed    = lipgloss.Color("#FF5555")
-	colorYellow = lipgloss.Color("#FFD700")
-)
+func runInteractive(keyword, dir, theme string) error {
+	cfg, _ := config.Load()
 
-func runInteractive(keyword, dir string) error {
+	// CLI flags override saved config; non-empty flag values are persisted.
+	changed := false
+	if theme != "" && theme != cfg.Theme {
+		cfg.Theme = theme
+		changed = true
+	}
+	if dir != "" && dir != cfg.Dir {
+		cfg.Dir = dir
+		changed = true
+	}
+	if changed {
+		_ = config.Save(cfg)
+	}
+
+	// Resolve effective values (flag > config > default).
+	effectiveDir := cfg.Dir
+	if dir != "" {
+		effectiveDir = dir
+	}
+	effectiveTheme := cfg.Theme
+
+	huhTheme := resolveTheme(effectiveTheme)
+
+	// Colors used outside huh (progress lines, summary).
+	cyan  := lipgloss.Color("#0097AF")
+	green := lipgloss.Color("#00C97A")
+	red   := lipgloss.Color("#FF5555")
+
 	if keyword == "" {
 		err := huh.NewInput().
 			Title("Search keyword").
@@ -39,6 +61,7 @@ func runInteractive(keyword, dir string) error {
 				return nil
 			}).
 			Value(&keyword).
+			WithTheme(huhTheme).
 			Run()
 		if err != nil {
 			return err
@@ -47,8 +70,8 @@ func runInteractive(keyword, dir string) error {
 
 	reg := api.NewRegistry()
 
-	searchLabel := lipgloss.NewStyle().Foreground(colorCyan).Bold(true).Render("▶")
-	fmt.Fprintf(os.Stderr, "\n%s Searching %q ...\n\n", searchLabel, keyword)
+	label := lipgloss.NewStyle().Foreground(cyan).Bold(true).Render("▶")
+	fmt.Fprintf(os.Stderr, "\n%s Searching %q ...\n\n", label, keyword)
 
 	result, err := reg.Search(api.SearchRequest{
 		Keyword: keyword,
@@ -59,26 +82,28 @@ func runInteractive(keyword, dir string) error {
 		return fmt.Errorf("search failed: %w", err)
 	}
 	if len(result.Songs) == 0 {
-		fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Foreground(colorYellow).Render("No results found."))
+		fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Faint(true).Render("No results found."))
 		return nil
 	}
 
 	options := buildSongOptions(result.Songs)
 
-	titleStyle := lipgloss.NewStyle().Foreground(colorCyan).Bold(true)
+	titleStyle := lipgloss.NewStyle().Foreground(cyan).Bold(true)
 	var selected []int
 	err = huh.NewMultiSelect[int]().
-		Title(titleStyle.Render(fmt.Sprintf("Found %d tracks  (space=toggle  ctrl+a=all  enter=confirm)", len(result.Songs)))).
+		Title(titleStyle.Render(fmt.Sprintf(
+			"Found %d tracks  (space=toggle  ctrl+a=all  enter=confirm)", len(result.Songs)))).
 		Options(options...).
 		Height(22).
 		Value(&selected).
+		WithTheme(huhTheme).
 		Run()
 	if err != nil {
 		return err
 	}
 
 	if len(selected) == 0 {
-		fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Foreground(colorDim).Render("No tracks selected."))
+		fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Faint(true).Render("No tracks selected."))
 		return nil
 	}
 
@@ -87,29 +112,28 @@ func runInteractive(keyword, dir string) error {
 		songs[i] = result.Songs[idx]
 	}
 
-	baseDir := dir
-	if baseDir == "" {
-		baseDir = filepath.Join(".", "downloads")
+	if effectiveDir == "" {
+		effectiveDir = filepath.Join(".", "downloads")
 	}
-	outDir := filepath.Join(baseDir, downloader.SanitizeFilename(keyword))
+	outDir := filepath.Join(effectiveDir, downloader.SanitizeFilename(keyword))
 
 	fmt.Fprintf(os.Stderr, "\n%s Downloading %d track(s) → %s\n\n",
-		lipgloss.NewStyle().Foreground(colorGreen).Bold(true).Render("▶"),
+		lipgloss.NewStyle().Foreground(green).Bold(true).Render("▶"),
 		len(songs), outDir)
 
-	results := batchDownload(reg, songs, outDir)
-	printSummary(results)
+	results := batchDownload(reg, songs, outDir, red, green)
+	printSummary(results, cyan, green, red)
 
 	return nil
 }
 
 func buildSongOptions(songs []models.Song) []huh.Option[int] {
-	titleStyle  := lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
-	artistStyle := lipgloss.NewStyle().Foreground(colorCyan)
-	albumStyle  := lipgloss.NewStyle().Foreground(colorDim)
-	fmtStyle    := lipgloss.NewStyle().Foreground(colorGreen)
-	sizeStyle   := lipgloss.NewStyle().Foreground(colorDim)
-	naStyle     := lipgloss.NewStyle().Foreground(colorDim)
+	titleStyle  := lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0")).Bold(true)
+	artistStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0097AF"))
+	albumStyle  := lipgloss.NewStyle().Faint(true)
+	fmtStyle    := lipgloss.NewStyle().Foreground(lipgloss.Color("#00C97A"))
+	sizeStyle   := lipgloss.NewStyle().Faint(true)
+	naStyle     := lipgloss.NewStyle().Faint(true)
 
 	opts := make([]huh.Option[int], len(songs))
 	for i, s := range songs {
@@ -134,7 +158,6 @@ func buildSongOptions(songs []models.Song) []huh.Option[int] {
 	return opts
 }
 
-// formatLabel returns a human-readable format string derived from bitrate.
 func formatLabel(br int) string {
 	switch {
 	case br >= 800000:
@@ -152,16 +175,13 @@ func formatLabel(br int) string {
 	}
 }
 
-// sizeLabel returns size in MB with one decimal place.
 func sizeLabel(bytes int) string {
 	if bytes <= 0 {
 		return "--"
 	}
-	mb := float64(bytes) / (1024 * 1024)
-	return fmt.Sprintf("%.1f MB", mb)
+	return fmt.Sprintf("%.1f MB", float64(bytes)/(1024*1024))
 }
 
-// truncate shortens s to max runes, appending … if cut.
 func truncate(s string, max int) string {
 	runes := []rune(s)
 	if len(runes) <= max {
@@ -175,15 +195,15 @@ type trackJob struct {
 	idx  int
 }
 
-func batchDownload(reg *api.Registry, songs []models.Song, outDir string) []downloader.Result {
+func batchDownload(reg *api.Registry, songs []models.Song, outDir string, red, green color.Color) []downloader.Result {
 	results := make([]downloader.Result, len(songs))
 	jobs := make(chan trackJob, len(songs))
 	var wg sync.WaitGroup
 
-	okStyle   := lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
-	failStyle := lipgloss.NewStyle().Foreground(colorRed).Bold(true)
-	dimStyle  := lipgloss.NewStyle().Foreground(colorDim)
-	nameStyle := lipgloss.NewStyle().Foreground(colorWhite)
+	okStyle   := lipgloss.NewStyle().Foreground(green).Bold(true)
+	failStyle := lipgloss.NewStyle().Foreground(red).Bold(true)
+	dimStyle  := lipgloss.NewStyle().Faint(true)
+	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0"))
 
 	var mu sync.Mutex
 
@@ -205,8 +225,7 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string) []down
 
 				urlResult, err := reg.GetURL(s.Source, s.URLID, api.URLOptions{})
 				if err != nil {
-					res := downloader.Result{Path: outPath, Err: fmt.Errorf("resolve url: %w", err)}
-					results[job.idx] = res
+					results[job.idx] = downloader.Result{Path: outPath, Err: fmt.Errorf("resolve url: %w", err)}
 					mu.Lock()
 					fmt.Fprintln(os.Stderr, "  "+failStyle.Render("FAIL")+"  "+dimStyle.Render(err.Error()))
 					mu.Unlock()
@@ -243,7 +262,7 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string) []down
 	return results
 }
 
-func printSummary(results []downloader.Result) {
+func printSummary(results []downloader.Result, cyan, green, red color.Color) {
 	var success, fail int
 	var totalSize int64
 	var totalDur time.Duration
@@ -258,10 +277,10 @@ func printSummary(results []downloader.Result) {
 		}
 	}
 
-	header  := lipgloss.NewStyle().Foreground(colorCyan).Bold(true).Underline(true)
-	okStyle := lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
-	errStyle := lipgloss.NewStyle().Foreground(colorRed).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
+	header  := lipgloss.NewStyle().Foreground(cyan).Bold(true).Underline(true)
+	okStyle := lipgloss.NewStyle().Foreground(green).Bold(true)
+	errStyle := lipgloss.NewStyle().Foreground(red).Bold(true)
+	dimStyle := lipgloss.NewStyle().Faint(true)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, header.Render("Download Summary"))
@@ -279,7 +298,7 @@ func printSummary(results []downloader.Result) {
 		for _, r := range results {
 			if r.Err != nil {
 				fmt.Fprintf(os.Stderr, "  %s  %s\n",
-					lipgloss.NewStyle().Foreground(colorRed).Render("✗"),
+					lipgloss.NewStyle().Foreground(red).Render("✗"),
 					dimStyle.Render(filepath.Base(r.Path)+": "+r.Err.Error()))
 			}
 		}

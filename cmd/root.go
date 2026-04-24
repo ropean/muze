@@ -20,7 +20,8 @@ var root = &cobra.Command{
 			keyword = args[0]
 		}
 		dir, _ := cmd.Flags().GetString("dir")
-		return runInteractive(keyword, dir)
+		theme, _ := cmd.Flags().GetString("theme")
+		return runInteractive(keyword, dir, theme)
 	},
 }
 
@@ -33,6 +34,7 @@ func Execute() {
 
 func init() {
 	root.Flags().String("dir", "", "Download directory (default: ./downloads/<keyword>)")
+	root.Flags().String("theme", "", "UI theme: base16|tech|charm|dracula|catppuccin (saved to config)")
 	root.AddCommand(searchCmd, urlCmd, downloadCmd, serveCmd, versionCmd, checkUpdateCmd, upgradeCmd)
 }
 
