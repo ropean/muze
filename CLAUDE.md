@@ -27,13 +27,13 @@ Currently only **netease** is registered. Other sources (kugou, kuwo, qq) were e
 
 ## API Compatibility
 
-Interface methods that take an options struct use variadic parameters for backward compatibility:
+**Rule: never break existing callers when evolving interfaces.**
 
-```go
-GetURL(id string, opts ...URLOptions) (models.URLResult, error)
-```
+- Optional parameters on any interface method must use variadic form: `opts ...FooOptions`. Callers that pass nothing still compile; callers that pass a value still compile.
+- Adding a new field to an existing options struct is always safe (zero value = old behavior).
+- Removing or renaming a method, or changing required parameter types, requires updating every caller in the same commit.
 
-Callers may pass zero or one `opts` value. Zero means "use defaults". This allows adding new options fields without forcing every caller to update. **All new optional parameters on existing interface methods must follow this pattern.**
+This applies to every future change, not just `GetURL`.
 
 ## LyricsSource
 
