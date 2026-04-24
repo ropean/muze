@@ -7,17 +7,20 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Netease: search via `/api/cloudsearch/pc` to return cover art URL (`pic_url`) directly
 - Netease: `GetURL` quality selection (`flac` / `320k` / `128k`)
-- Netease: CGG third-party fallback for VIP / geo-blocked tracks
 - Netease: lyrics support via `/api/song/lyric` (LRC format)
 - HTTP server: `/lyrics` endpoint
 - `url` command: `--quality` flag
 - `download` command: `--quality` flag and `--lyrics` flag (saves `.lrc` alongside audio)
+- Interactive TUI: search results now show Format (FLAC / MP3 320k / 128k) and Size (MB) columns, extracted from search metadata — no extra API call
+- Interactive TUI: `--theme` flag to select UI theme (`base16` / `tech` / `charm` / `dracula` / `catppuccin`)
+- Interactive TUI: `--dir` and `--theme` values are saved to `config.json` and reused across sessions
 - OpenAPI 3.1 spec (`openapi.yaml`)
 
 ### Fixed
 - `install.sh`: installed binary now has `.exe` suffix on Windows
 - `install.sh`: PATH warning now shows Windows-style path (`C:\...`) on Windows
 - `install.sh`: version resolution, default install directory, cross-platform support
+- `Makefile`: `build` target now appends `.exe` suffix automatically on Windows
 
 ## [v0.0.2] - 2026-04-21
 
