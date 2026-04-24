@@ -10,8 +10,15 @@ BINARY_NAME ?= muze
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS     := -s -w -X github.com/ropean/muze/internal/selfupdate.Version=$(VERSION)
 
+# Append .exe on Windows (GOOS set by Go toolchain, or detected via OS env)
+ifeq ($(OS),Windows_NT)
+  EXT := .exe
+else
+  EXT :=
+endif
+
 build: ## Build the binary
-	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME) .
+	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME)$(EXT) .
 
 test: ## Run all tests
 	go test -race ./...
@@ -35,4 +42,4 @@ lint-full: ## Strict lint with golangci-lint (style, complexity, unused code, et
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run ./...
 
 clean: ## Remove build artifacts
-	rm -f $(BINARY_NAME)
+	rm -f $(BINARY_NAME) $(BINARY_NAME).exe
