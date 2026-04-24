@@ -135,7 +135,7 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string) []down
 					job.idx+1, len(songs), s.Title, s.Artist)
 				mu.Unlock()
 
-				urlResult, err := reg.GetURL(s.Source, s.URLID)
+				urlResult, err := reg.GetURL(s.Source, s.URLID, api.URLOptions{})
 				if err != nil {
 					res := downloader.Result{Path: outPath, Err: fmt.Errorf("resolve url: %w", err)}
 					results[job.idx] = res

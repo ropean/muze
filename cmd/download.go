@@ -25,7 +25,7 @@ a custom path, or --title/--artist to control the default name.`,
 		force, _ := cmd.Flags().GetBool("force")
 
 		reg := api.NewRegistry()
-		result, err := reg.GetURL(source, id)
+		result, err := reg.GetURL(source, id, api.URLOptions{})
 		if err != nil {
 			writeError("resolve url: %s", err)
 		}

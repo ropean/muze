@@ -61,7 +61,7 @@ func TestNeteaseGetURL(t *testing.T) {
 	var lastErr error
 	for _, s := range songs {
 		t.Logf("Trying URL for: %s (id=%s)", s.Title, s.URLID)
-		result, err := n.GetURL(s.URLID)
+		result, err := n.GetURL(s.URLID, api.URLOptions{})
 		if err != nil {
 			lastErr = err
 			t.Logf("  -> not available: %v", err)
@@ -82,6 +82,33 @@ func TestNeteaseGetURL(t *testing.T) {
 		return
 	}
 	t.Skipf("all %d songs require login/VIP in this environment (last: %v)", len(songs), lastErr)
+}
+
+func TestNeteaseGetURL_WithQuality(t *testing.T) {
+	n := api.NewNetease()
+	songs, _, _, err := n.Search("刘德华", api.SearchOptions{Page: 1, PerPage: 20})
+	if err != nil {
+		t.Skipf("search unavailable: %v", err)
+	}
+	if len(songs) == 0 {
+		t.Skip("no search results")
+	}
+
+	for _, s := range songs {
+		result, err := n.GetURL(s.URLID, api.URLOptions{Quality: "320k"})
+		if err != nil {
+			t.Logf("320k not available for %s: %v", s.URLID, err)
+			continue
+		}
+		if result.URL == "" {
+			t.Error("URL is empty")
+		}
+		if result.Quality != "320k" {
+			t.Errorf("expected Quality=320k, got %q", result.Quality)
+		}
+		return
+	}
+	t.Skip("no songs with 320k quality available in this environment")
 }
 
 func TestRegistrySearch(t *testing.T) {
@@ -129,14 +156,51 @@ func TestRegistrySearch_UnknownSource(t *testing.T) {
 
 func TestRegistryGetURL_UnknownSource(t *testing.T) {
 	reg := api.NewRegistry()
-	_, err := reg.GetURL("nonexistent", "123")
+	_, err := reg.GetURL("nonexistent", "123", api.URLOptions{})
 	if err == nil {
 		t.Fatal("expected error for unknown source, got nil")
 	}
 }
 
+func TestNeteaseGetLyrics_Live(t *testing.T) {
+	n := api.NewNetease()
+	songs, _, _, err := n.Search("刘德华", api.SearchOptions{Page: 1, PerPage: 5})
+	if err != nil || len(songs) == 0 {
+		t.Skip("search unavailable for lyrics test")
+	}
+
+	lyrics, err := n.GetLyrics(songs[0].LyricID)
+	if err != nil {
+		t.Skipf("lyrics not available: %v", err)
+	}
+	t.Logf("lyrics length: %d chars", len(lyrics))
+}
+
+func TestRegistryGetLyrics_UnknownSource(t *testing.T) {
+	reg := api.NewRegistry()
+	_, err := reg.GetLyrics("nonexistent", "123")
+	if err == nil {
+		t.Fatal("expected error for unknown source, got nil")
+	}
+}
+
+func TestRegistryGetLyrics_UnsupportedSource(t *testing.T) {
+	reg := api.NewRegistry()
+	// kugou does not implement LyricsSource
+	_, err := reg.GetLyrics("kugou", "123")
+	if err == nil {
+		t.Fatal("expected error for source that does not support lyrics, got nil")
+	}
+}
+
+func TestURLOptions_DefaultQuality(t *testing.T) {
+	opts := api.URLOptions{}
+	if opts.Quality != "" {
+		t.Errorf("zero URLOptions should have empty Quality, got %q", opts.Quality)
+	}
+}
+
 func TestSongShape(t *testing.T) {
-	// Verify Song JSON keys match the provider contract exactly.
 	s := models.Song{
 		Title:   "Test",
 		Artist:  "Artist",
@@ -170,4 +234,111 @@ func TestURLResultShape(t *testing.T) {
 			t.Errorf("URLResult JSON missing required key: %q", key)
 		}
 	}
+}
+
+func TestNeteaseSearch_PicURL(t *testing.T) {
+	n := api.NewNetease()
+	songs, _, _, err := n.Search("刘德华", api.SearchOptions{Page: 1, PerPage: 10})
+	if err != nil {
+		t.Skipf("search unavailable: %v", err)
+	}
+	if len(songs) == 0 {
+		t.Skip("no results")
+	}
+	found := false
+	for _, s := range songs {
+		if s.PicURL != "" {
+			found = true
+			if !strings.HasPrefix(s.PicURL, "http") {
+				t.Errorf("PicURL does not start with http: %s", s.PicURL)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected at least one song with non-empty PicURL from cloudsearch")
+	}
+}
+
+func TestNeteaseSearch_Pagination(t *testing.T) {
+	n := api.NewNetease()
+	page1, total, _, err := n.Search("刘德华", api.SearchOptions{Page: 1, PerPage: 10})
+	if err != nil {
+		t.Skipf("search unavailable: %v", err)
+	}
+	if total < 11 {
+		t.Skip("not enough results to test pagination")
+	}
+	page2, _, _, err := n.Search("刘德华", api.SearchOptions{Page: 2, PerPage: 10})
+	if err != nil {
+		t.Skipf("page 2 unavailable: %v", err)
+	}
+	if len(page2) == 0 {
+		t.Error("page 2 returned no results")
+	}
+	if len(page1) > 0 && len(page2) > 0 && page1[0].URLID == page2[0].URLID {
+		t.Error("page 1 and page 2 returned the same first song")
+	}
+}
+
+func TestNeteaseGetURL_Flac(t *testing.T) {
+	n := api.NewNetease()
+	songs, _, _, err := n.Search("刘德华", api.SearchOptions{Page: 1, PerPage: 20})
+	if err != nil {
+		t.Skipf("search unavailable: %v", err)
+	}
+	for _, s := range songs {
+		result, err := n.GetURL(s.URLID, api.URLOptions{Quality: "flac"})
+		if err != nil {
+			continue
+		}
+		if result.URL == "" {
+			t.Error("URL is empty")
+		}
+		if result.Quality != "flac" {
+			t.Errorf("expected Quality=flac, got %q", result.Quality)
+		}
+		t.Logf("flac URL obtained for %s (br=%d size=%d)", s.Title, result.BR, result.Size)
+		return
+	}
+	t.Skip("no songs with flac available in this environment")
+}
+
+func TestNeteaseGetURL_128k(t *testing.T) {
+	n := api.NewNetease()
+	songs, _, _, err := n.Search("刘德华", api.SearchOptions{Page: 1, PerPage: 20})
+	if err != nil {
+		t.Skipf("search unavailable: %v", err)
+	}
+	for _, s := range songs {
+		result, err := n.GetURL(s.URLID, api.URLOptions{Quality: "128k"})
+		if err != nil {
+			continue
+		}
+		if result.URL == "" {
+			t.Error("URL is empty")
+		}
+		if result.Quality != "128k" {
+			t.Errorf("expected Quality=128k, got %q", result.Quality)
+		}
+		t.Logf("128k URL obtained for %s (br=%d size=%d)", s.Title, result.BR, result.Size)
+		return
+	}
+	t.Skip("no songs with 128k available in this environment")
+}
+
+func TestRegistryGetLyrics_Netease(t *testing.T) {
+	reg := api.NewRegistry()
+	songs, err := reg.Search(api.SearchRequest{Keyword: "刘德华", Sources: "netease", Page: 1, Limit: 5})
+	if err != nil || len(songs.Songs) == 0 {
+		t.Skip("search unavailable for lyrics registry test")
+	}
+	lyrics, err := reg.GetLyrics("netease", songs.Songs[0].LyricID)
+	if err != nil {
+		t.Skipf("lyrics not available via registry: %v", err)
+	}
+	if lyrics == "" {
+		t.Error("lyrics is empty")
+	}
+	t.Logf("lyrics length: %d chars", len(lyrics))
 }

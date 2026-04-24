@@ -11,7 +11,7 @@ var urlCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		source, id := args[0], args[1]
-		result, err := api.NewRegistry().GetURL(source, id)
+		result, err := api.NewRegistry().GetURL(source, id, api.URLOptions{})
 		if err != nil {
 			writeError(err.Error())
 		}

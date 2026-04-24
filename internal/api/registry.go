@@ -145,10 +145,24 @@ func (r *Registry) Search(req SearchRequest) (models.SearchResult, error) {
 }
 
 // GetURL resolves a URL for the given source and track ID.
-func (r *Registry) GetURL(source, id string) (models.URLResult, error) {
+func (r *Registry) GetURL(source, id string, opts URLOptions) (models.URLResult, error) {
 	s, ok := r.sources[source]
 	if !ok {
 		return models.URLResult{}, fmt.Errorf("unknown source: %q", source)
 	}
-	return s.GetURL(id)
+	return s.GetURL(id, opts)
+}
+
+// GetLyrics fetches lyrics for the given source and track ID.
+// Returns an error if the source does not implement LyricsSource.
+func (r *Registry) GetLyrics(source, id string) (string, error) {
+	s, ok := r.sources[source]
+	if !ok {
+		return "", fmt.Errorf("unknown source: %q", source)
+	}
+	ls, ok := s.(LyricsSource)
+	if !ok {
+		return "", fmt.Errorf("source %q does not support lyrics", source)
+	}
+	return ls.GetLyrics(id)
 }
