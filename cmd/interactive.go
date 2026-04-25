@@ -50,7 +50,7 @@ func runInteractive(keyword, dir, theme, quality string) error {
 	if keyword == "" {
 		err := huh.NewInput().
 			Title("Search keyword").
-			Placeholder("e.g. Jay Chou").
+			Placeholder("e.g. 不想长大").
 			Validate(func(s string) error {
 				if s == "" {
 					return fmt.Errorf("keyword cannot be empty")
