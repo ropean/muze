@@ -38,17 +38,17 @@ func techTheme(isDark bool) *huh.Styles {
 	)
 
 	if isDark {
-		cyan   = lipgloss.Color("#0097AF")
-		green  = lipgloss.Color("#00C97A")
+		cyan = lipgloss.Color("#0097AF")
+		green = lipgloss.Color("#00C97A")
 		accent = lipgloss.Color("#00D4FF")
-		muted  = lipgloss.Color("#4A5568")
-		fg     = lipgloss.Color("#E2E8F0")
+		muted = lipgloss.Color("#4A5568")
+		fg = lipgloss.Color("#E2E8F0")
 	} else {
-		cyan   = lipgloss.Color("#006B80")
-		green  = lipgloss.Color("#007A4A")
+		cyan = lipgloss.Color("#006B80")
+		green = lipgloss.Color("#007A4A")
 		accent = lipgloss.Color("#0088AA")
-		muted  = lipgloss.Color("#718096")
-		fg     = lipgloss.Color("#1A202C")
+		muted = lipgloss.Color("#718096")
+		fg = lipgloss.Color("#1A202C")
 	}
 
 	t.Focused.Base = t.Focused.Base.BorderForeground(cyan)

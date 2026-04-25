@@ -20,7 +20,7 @@ func TestDefaultFilename(t *testing.T) {
 		{"  spaces  ", "  artist  ", "spaces - artist.mp3"},
 	}
 	for _, tt := range tests {
-		got := DefaultFilename(tt.title, tt.artist)
+		got := DefaultFilename(tt.title, tt.artist, "")
 		if got != tt.want {
 			t.Errorf("DefaultFilename(%q, %q) = %q, want %q", tt.title, tt.artist, got, tt.want)
 		}

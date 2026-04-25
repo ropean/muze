@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	neteaseBase      = "https://music.163.com"
-	neteaseEapiBase  = "https://interface.music.163.com"
-	neteaseEapiKey   = "e82ckenh8dichen8"
+	neteaseBase     = "https://music.163.com"
+	neteaseEapiBase = "https://interface.music.163.com"
+	neteaseEapiKey  = "e82ckenh8dichen8"
 
 	// AES encryption constants (from Meting v1.5.11)
 	neteaseNonce = "0CoJUm6Qyw8W8jud"
@@ -43,7 +43,7 @@ const (
 	neteaseIPMax = 1884890111
 )
 
-// Netease implements MusicSource and LyricsSource for 网易云音乐.
+// Netease implements MusicSource and LyricsSource for Netease Cloud Music.
 type Netease struct {
 	client    *http.Client
 	rng       *rand.Rand

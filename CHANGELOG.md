@@ -15,13 +15,20 @@ All notable changes to this project will be documented in this file.
 - `url` command: `--quality` flag
 - `download` command: `--quality` flag and `--lyrics` flag (saves `.lrc` alongside audio)
 - `muze config` subcommand: view and update persistent settings (theme, download directory, Netease cookie) via flags or interactive TUI prompts
+- `muze config list` subcommand: print current configuration without modifying it
 - Interactive TUI: search results now show Format (FLAC / MP3 320k / 128k) and Size (MB) columns, extracted from search metadata — no extra API call
 - Interactive TUI: columns auto-align with CJK-aware width (Chinese characters = 2 terminal columns)
 - Interactive TUI: `--theme` flag; theme now applies to all CLI output (song list labels, progress lines, download summary) via a per-theme `Palette{Primary, OK, Fail, Text}`
 - Interactive TUI: `--dir` and `--theme` values are saved to `config.json` and reused across sessions
+- Interactive TUI: column header row displayed above the track list, offset to align with option checkboxes (theme-aware)
+- Interactive TUI: `[ ✓ All ]` as first option — selecting it expands to all tracks
+- Interactive TUI: confirmed selection reprinted to stderr after the TUI exits, remaining visible during download
+- Interactive TUI: aggregated download progress bar (per-song atomic byte counters, 150 ms refresh); bar preserved on screen at completion
+- Interactive TUI: elapsed time in download summary formatted with one decimal place (e.g. `3m19.8s`)
 - Downloaded files use the correct extension from the resolved URL (`.flac` vs `.mp3`)
 - Default download directory is now platform-appropriate (`~/Downloads`) instead of a relative path
 - HTTP server: startup now lists all endpoints with auto-aligned columns; adding a route updates the display automatically
+- HTTP server: `/config` renamed to `/config/cookie` for clearer semantics
 - `make serve` target for quick local server start
 - Help flag (`-h, --help`) always appears first in every command's flag list
 - OpenAPI 3.1 spec (`openapi.yaml`)

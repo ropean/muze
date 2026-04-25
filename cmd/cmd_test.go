@@ -161,9 +161,9 @@ func TestBuildSongOptions(t *testing.T) {
 		{Title: "Song A", Artist: "Artist A", Album: "Album A"},
 		{Title: "Song B", Artist: "Artist B"},
 	}
-	opts := buildSongOptions(songs)
-	if len(opts) != 2 {
-		t.Fatalf("expected 2 options, got %d", len(opts))
+	opts := buildSongOptions(songs, paletteFor(""))
+	if len(opts) != len(songs)+1 { // +1 for the "Select All" option
+		t.Fatalf("expected %d options, got %d", len(songs)+1, len(opts))
 	}
 }
 

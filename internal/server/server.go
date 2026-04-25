@@ -61,7 +61,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/search", s.handleSearch)
 	mux.HandleFunc("/url", s.handleURL)
 	mux.HandleFunc("/lyrics", s.handleLyrics)
-	mux.HandleFunc("/config", s.handleConfig)
+	mux.HandleFunc("/config/cookie", s.handleConfig)
 	mux.HandleFunc("/health", handleHealth)
 	return mux
 }
@@ -76,12 +76,12 @@ type RouteInfo struct {
 // Routes returns all registered endpoints for the startup table.
 func Routes() []RouteInfo {
 	return []RouteInfo{
-		{"GET",  "/search", []string{"q=<keyword>", "[page=1]", "[limit=50]", "[sources=netease]"}},
-		{"GET",  "/url",    []string{"source=<src>", "id=<id>", "[quality=flac|320k|128k]"}},
-		{"GET",  "/lyrics", []string{"source=<src>", "id=<id>"}},
-		{"GET",  "/config", []string{"→ returns current cookie status"}},
-		{"POST", "/config", []string{`{"netease_cookie_raw":"..."}`, "→ update cookie + hot-reload"}},
-		{"GET",  "/health", nil},
+		{"GET", "/search", []string{"q=<keyword>", "[page=1]", "[limit=50]", "[sources=netease]"}},
+		{"GET", "/url", []string{"source=<src>", "id=<id>", "[quality=flac|320k|128k]"}},
+		{"GET", "/lyrics", []string{"source=<src>", "id=<id>"}},
+		{"GET", "/config/cookie", []string{"→ returns current cookie"}},
+		{"POST", "/config/cookie", []string{`_ntes_nnid=cfdd02b7bc...`, "→ update cookie"}},
+		{"GET", "/health", nil},
 	}
 }
 

@@ -23,8 +23,8 @@ var root = &cobra.Command{
 		if len(args) > 0 {
 			keyword = args[0]
 		}
-		dir, _     := cmd.Flags().GetString("dir")
-		theme, _   := cmd.Flags().GetString("theme")
+		dir, _ := cmd.Flags().GetString("dir")
+		theme, _ := cmd.Flags().GetString("theme")
 		quality, _ := cmd.Flags().GetString("quality")
 		return runInteractive(keyword, dir, theme, quality)
 	},

@@ -26,17 +26,29 @@ for VIP quality (FLAC / 320k) access.`,
 	RunE: runConfig,
 }
 
+var configListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Show current configuration",
+	RunE: func(_ *cobra.Command, _ []string) error {
+		cfg, _ := config.Load()
+		_, pal := resolveTheme(cfg.Theme)
+		printConfig(cfg, pal, false)
+		return nil
+	},
+}
+
 func init() {
 	configCmd.Flags().String("dir", "", "Default download directory")
 	configCmd.Flags().String("theme", "", "UI theme: base16|tech|charm|dracula|catppuccin")
 	configCmd.Flags().String("cookie", "", "Full browser cookie string (MUSIC_U + __csrf + JSESSIONID etc.)")
+	configCmd.AddCommand(configListCmd)
 }
 
 func runConfig(cmd *cobra.Command, _ []string) error {
 	cfg, _ := config.Load()
 
-	flagDir, _    := cmd.Flags().GetString("dir")
-	flagTheme, _  := cmd.Flags().GetString("theme")
+	flagDir, _ := cmd.Flags().GetString("dir")
+	flagTheme, _ := cmd.Flags().GetString("theme")
 	flagCookie, _ := cmd.Flags().GetString("cookie")
 
 	anyFlag := cmd.Flags().Changed("dir") || cmd.Flags().Changed("theme") || cmd.Flags().Changed("cookie")
@@ -66,7 +78,7 @@ func applyAndSave(cfg *config.Config, dir, theme, cookie string) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 	_, pal := resolveTheme(cfg.Theme)
-	printConfig(cfg, pal)
+	printConfig(cfg, pal, true)
 	return nil
 }
 
@@ -74,7 +86,7 @@ func runConfigInteractive(cfg *config.Config) error {
 	huhTheme, pal := resolveTheme(cfg.Theme)
 
 	arrow := lipgloss.NewStyle().Foreground(pal.Primary).Bold(true).Render("▶")
-	dim   := lipgloss.NewStyle().Faint(true)
+	dim := lipgloss.NewStyle().Faint(true)
 	fmt.Fprintf(os.Stderr, "\n%s Configure muze  %s\n\n",
 		arrow, dim.Render("(press Enter to keep current value)"))
 
@@ -110,13 +122,13 @@ func runConfigInteractive(cfg *config.Config) error {
 
 	// --- Netease cookie ---
 	cookieInput := ""
-	cookieDesc := "需要完整浏览器 Cookie 字符串（含 MUSIC_U / __csrf / JSESSIONID-WYYY 等）\n" +
-		"  用于 VIP 音质（FLAC / 无损）访问。从浏览器开发者工具 Network 面板复制。"
+	cookieDesc := "Full browser cookie string containing MUSIC_U, __csrf, JSESSIONID-WYYY, etc.\n" +
+		"  Required for VIP quality (FLAC / lossless). Copy from browser DevTools → Network tab."
 	if cfg.NeteaseCookieRaw != "" {
 		cookieDesc += "\n  Current: " + cfg.NeteaseCookieRaw[:min(60, len(cfg.NeteaseCookieRaw))] + "..."
 	}
 	if err := huh.NewInput().
-		Title("Netease cookie  (完整 Cookie)").
+		Title("Netease cookie").
 		Description(cookieDesc).
 		Placeholder("e.g. _ntes_nnid=...; MUSIC_U=...; __csrf=...  (empty = keep)").
 		Value(&cookieInput).
@@ -128,9 +140,8 @@ func runConfigInteractive(cfg *config.Config) error {
 	return applyAndSave(cfg, strings.TrimSpace(dirInput), themeChoice, strings.TrimSpace(cookieInput))
 }
 
-func printConfig(cfg *config.Config, pal Palette) {
+func printConfig(cfg *config.Config, pal Palette, saved bool) {
 	arrow := lipgloss.NewStyle().Foreground(pal.Primary).Bold(true).Render("▶")
-	ok    := lipgloss.NewStyle().Foreground(pal.OK).Bold(true).Render("saved")
 
 	cookieSummary := "(not set)"
 	if cfg.NeteaseCookieRaw != "" {
@@ -139,7 +150,11 @@ func printConfig(cfg *config.Config, pal Palette) {
 		cookieSummary = "MUSIC_U=" + cfg.NeteaseCookie[:min(20, len(cfg.NeteaseCookie))] + "..."
 	}
 
-	fmt.Fprintf(os.Stderr, "\n%s Config %s\n", arrow, ok)
+	header := fmt.Sprintf("\n%s Config", arrow)
+	if saved {
+		header += "  " + lipgloss.NewStyle().Foreground(pal.OK).Bold(true).Render("saved")
+	}
+	fmt.Fprintln(os.Stderr, header)
 	fmt.Fprintf(os.Stderr, "  theme   %s\n", cfg.Theme)
 	fmt.Fprintf(os.Stderr, "  dir     %s\n", currentOrDefault(cfg.Dir, config.DefaultDownloadDir()))
 	fmt.Fprintf(os.Stderr, "  cookie  %s\n\n", cookieSummary)

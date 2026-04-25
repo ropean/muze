@@ -9,10 +9,10 @@ import (
 
 // Config holds user preferences persisted across sessions.
 type Config struct {
-	Theme         string `json:"theme"`          // base16 | tech | charm | dracula | catppuccin
-	Dir           string `json:"dir"`            // default download directory
-	NeteaseCookie string `json:"netease_cookie"` // MUSIC_U token value (without "MUSIC_U=" prefix)
-	NeteaseCsrf   string `json:"netease_csrf"`   // __csrf token value (without "__csrf=" prefix)
+	Theme            string `json:"theme"`              // base16 | tech | charm | dracula | catppuccin
+	Dir              string `json:"dir"`                // default download directory
+	NeteaseCookie    string `json:"netease_cookie"`     // MUSIC_U token value (without "MUSIC_U=" prefix)
+	NeteaseCsrf      string `json:"netease_csrf"`       // __csrf token value (without "__csrf=" prefix)
 	NeteaseCookieRaw string `json:"netease_cookie_raw"` // full browser cookie string; overrides cookie/csrf fields if set
 }
 
