@@ -1,7 +1,7 @@
 # Go project tasks — similar role to npm scripts in Node (single entry: `make <target>`).
 # Optional: install https://taskfile.dev or github.com/go-task/task for YAML-style tasks.
 
-.PHONY: help build test test-cli test-http fmt lint vet clean
+.PHONY: help build serve test test-cli test-http fmt lint vet clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -10,8 +10,18 @@ BINARY_NAME ?= muze
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS     := -s -w -X github.com/ropean/muze/internal/selfupdate.Version=$(VERSION)
 
+# Append .exe on Windows (GOOS set by Go toolchain, or detected via OS env)
+ifeq ($(OS),Windows_NT)
+  EXT := .exe
+else
+  EXT :=
+endif
+
 build: ## Build the binary
-	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME) .
+	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME)$(EXT) .
+
+serve: ## Run HTTP server (default port 8010)
+	go run . serve
 
 test: ## Run all tests
 	go test -race ./...
@@ -35,4 +45,4 @@ lint-full: ## Strict lint with golangci-lint (style, complexity, unused code, et
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run ./...
 
 clean: ## Remove build artifacts
-	rm -f $(BINARY_NAME)
+	rm -f $(BINARY_NAME) $(BINARY_NAME).exe

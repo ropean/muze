@@ -57,12 +57,11 @@ resolve_version() {
 }
 
 download_and_install() {
-  local asset_name url tmp
-  asset_name="${BINARY}-${GOOS}-${GOARCH}"
-  if [ "$GOOS" = "windows" ]; then
-    asset_name="${asset_name}.exe"
-  fi
+  local ext="" asset_name url tmp dest
+  if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
 
+  asset_name="${BINARY}-${GOOS}-${GOARCH}${ext}"
+  dest="${INSTALL_DIR}/${BINARY}${ext}"
   url="https://github.com/${REPO}/releases/download/${VERSION}/${asset_name}"
   tmp="$(mktemp)"
 
@@ -72,7 +71,7 @@ download_and_install() {
   echo "[download] Download URL: $url"
   echo "[download] Temp file: $tmp"
   echo "[download] Install dir: $INSTALL_DIR"
-  echo "[download] Final path: ${INSTALL_DIR}/${BINARY}"
+  echo "[download] Final path: $dest"
 
   echo "Downloading ${BINARY} ${VERSION} (${GOOS}/${GOARCH})..."
   if ! curl -fsSL -o "$tmp" "$url"; then
@@ -86,15 +85,15 @@ download_and_install() {
     chmod +x "$tmp"
   fi
 
-  echo "Installing to ${INSTALL_DIR}/${BINARY}..."
-  if ! mv "$tmp" "${INSTALL_DIR}/${BINARY}"; then
+  echo "Installing to $dest..."
+  if ! mv "$tmp" "$dest"; then
     echo "[download] ERROR: mv failed. Do you have write permission to ${INSTALL_DIR}?" >&2
     echo "[download] Try: sudo bash install.sh  or  INSTALL_DIR=~/.local/bin bash install.sh" >&2
     rm -f "$tmp"
     exit 1
   fi
 
-  echo "Installed ${BINARY} ${VERSION} to ${INSTALL_DIR}/${BINARY}"
+  echo "Installed ${BINARY} ${VERSION} to $dest"
 }
 
 ensure_in_path() {
@@ -111,10 +110,12 @@ ensure_in_path() {
   shell_name="$(basename "${SHELL:-/bin/sh}")"
 
   if [ "$GOOS" = "windows" ]; then
+    local win_dir
+    win_dir="$(cygpath -w "${INSTALL_DIR}" 2>/dev/null || echo "${INSTALL_DIR}")"
     echo "  In Git Bash, add to ~/.bashrc:"
     echo "    echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bashrc"
     echo ""
-    echo "  Or add ${INSTALL_DIR} to your Windows PATH via System Environment Variables."
+    echo "  Or add ${win_dir} to your Windows PATH via System Environment Variables."
   else
     case "$shell_name" in
       zsh)

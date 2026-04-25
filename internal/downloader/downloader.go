@@ -38,14 +38,33 @@ func SanitizeFilename(name string) string {
 	return strings.TrimSpace(r.Replace(name))
 }
 
-// DefaultFilename builds "<title> - <artist>.mp3" with sanitised characters.
-func DefaultFilename(title, artist string) string {
+// DefaultFilename builds "<title> - <artist>.<ext>" with sanitised characters.
+// ext defaults to "mp3" if empty.
+func DefaultFilename(title, artist, ext string) string {
 	title = SanitizeFilename(title)
 	artist = SanitizeFilename(artist)
-	if artist == "" {
-		return title + ".mp3"
+	if ext == "" {
+		ext = "mp3"
 	}
-	return title + " - " + artist + ".mp3"
+	if artist == "" {
+		return title + "." + ext
+	}
+	return title + " - " + artist + "." + ext
+}
+
+// ExtFromURL returns the file extension (without dot) from a URL path,
+// ignoring query parameters. Returns "mp3" if no extension is found.
+func ExtFromURL(rawURL string) string {
+	if i := strings.Index(rawURL, "?"); i >= 0 {
+		rawURL = rawURL[:i]
+	}
+	if dot := strings.LastIndex(rawURL, "."); dot >= 0 {
+		ext := rawURL[dot+1:]
+		if ext != "" && !strings.ContainsAny(ext, "/\\") {
+			return ext
+		}
+	}
+	return "mp3"
 }
 
 // Download fetches opts.URL and writes it to opts.OutPath.

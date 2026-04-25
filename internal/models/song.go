@@ -9,6 +9,7 @@ type Song struct {
 	URLID   string  `json:"url_id"`
 	URL     *string `json:"url"` // nullable — populated after URL resolution
 	PicID   string  `json:"pic_id"`
+	PicURL  string  `json:"pic_url,omitempty"` // direct artwork URL when available
 	LyricID string  `json:"lyric_id"`
 	// BR and Size are optional on search: include when the upstream search API exposes them (bps, bytes).
 	BR   int `json:"br,omitempty"`
@@ -33,9 +34,17 @@ type SearchResult struct {
 
 // URLResult is the URL resolution response.
 type URLResult struct {
-	URL    string `json:"url"`
-	Size   int    `json:"size"` // bytes
-	BR     int    `json:"br"`   // bps
+	URL     string `json:"url"`
+	Size    int    `json:"size"`              // bytes
+	BR      int    `json:"br"`                // bps
+	Quality string `json:"quality,omitempty"` // e.g. "flac", "320k", "128k"
+	Source  string `json:"source"`
+	ID      string `json:"id"`
+}
+
+// LyricsResult is the lyrics response envelope.
+type LyricsResult struct {
+	Lyrics string `json:"lyrics"`
 	Source string `json:"source"`
 	ID     string `json:"id"`
 }

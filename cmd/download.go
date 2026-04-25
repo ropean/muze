@@ -23,9 +23,10 @@ a custom path, or --title/--artist to control the default name.`,
 		title, _ := cmd.Flags().GetString("title")
 		artist, _ := cmd.Flags().GetString("artist")
 		force, _ := cmd.Flags().GetBool("force")
+		quality, _ := cmd.Flags().GetString("quality")
 
-		reg := api.NewRegistry()
-		result, err := reg.GetURL(source, id)
+		reg := registry()
+		result, err := reg.GetURL(source, id, api.URLOptions{Quality: quality})
 		if err != nil {
 			writeError("resolve url: %s", err)
 		}
@@ -34,7 +35,8 @@ a custom path, or --title/--artist to control the default name.`,
 			if title == "" {
 				title = id
 			}
-			outPath = downloader.DefaultFilename(title, artist)
+			ext := downloader.ExtFromURL(result.URL)
+			outPath = downloader.DefaultFilename(title, artist, ext)
 		}
 
 		fmt.Fprintf(os.Stderr, "Downloading to %s ...\n", outPath)
@@ -67,4 +69,5 @@ func init() {
 	downloadCmd.Flags().String("title", "", "Track title (for default filename)")
 	downloadCmd.Flags().String("artist", "", "Artist name (for default filename)")
 	downloadCmd.Flags().Bool("force", false, "Overwrite existing file")
+	downloadCmd.Flags().String("quality", "", "Audio quality: flac|320k|128k (default: 320k)")
 }

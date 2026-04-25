@@ -50,3 +50,5 @@ docker-compose.override.yml
 # Environment
 .env
 .env.local
+
+.claude/settings.local.json
