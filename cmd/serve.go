@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/ropean/muze/internal/api"
 	"github.com/ropean/muze/internal/server"
 	"github.com/spf13/cobra"
 )
@@ -58,7 +57,7 @@ var serveCmd = &cobra.Command{
 		}
 		fmt.Fprintln(os.Stderr)
 
-		reg := api.NewRegistry()
+		reg := registry()
 		if err := http.ListenAndServe(addr, server.New(reg)); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)

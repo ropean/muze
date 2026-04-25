@@ -14,7 +14,7 @@ var searchCmd = &cobra.Command{
 		limit, _ := cmd.Flags().GetInt("limit")
 		sources, _ := cmd.Flags().GetString("sources")
 
-		result, err := api.NewRegistry().Search(api.SearchRequest{
+		result, err := registry().Search(api.SearchRequest{
 			Keyword: args[0],
 			Sources: sources,
 			Page:    page,

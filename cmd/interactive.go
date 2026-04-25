@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,11 +16,12 @@ import (
 	"github.com/ropean/muze/internal/config"
 	"github.com/ropean/muze/internal/downloader"
 	"github.com/ropean/muze/internal/models"
+
 )
 
 const downloadWorkers = 3
 
-func runInteractive(keyword, dir, theme string) error {
+func runInteractive(keyword, dir, theme, quality string) error {
 	cfg, _ := config.Load()
 
 	// CLI flags override saved config; non-empty flag values are persisted.
@@ -43,14 +43,8 @@ func runInteractive(keyword, dir, theme string) error {
 	if dir != "" {
 		effectiveDir = dir
 	}
-	effectiveTheme := cfg.Theme
 
-	huhTheme := resolveTheme(effectiveTheme)
-
-	// Colors used outside huh (progress lines, summary).
-	cyan  := lipgloss.Color("#0097AF")
-	green := lipgloss.Color("#00C97A")
-	red   := lipgloss.Color("#FF5555")
+	huhTheme, pal := resolveTheme(cfg.Theme)
 
 	if keyword == "" {
 		err := huh.NewInput().
@@ -70,10 +64,10 @@ func runInteractive(keyword, dir, theme string) error {
 		}
 	}
 
-	reg := api.NewRegistry()
+	reg := registry()
 
-	label := lipgloss.NewStyle().Foreground(cyan).Bold(true).Render("▶")
-	fmt.Fprintf(os.Stderr, "\n%s Searching %q ...\n\n", label, keyword)
+	arrow := lipgloss.NewStyle().Foreground(pal.Primary).Bold(true).Render("▶")
+	fmt.Fprintf(os.Stderr, "\n%s Searching %q ...\n\n", arrow, keyword)
 
 	result, err := reg.Search(api.SearchRequest{
 		Keyword: keyword,
@@ -88,9 +82,9 @@ func runInteractive(keyword, dir, theme string) error {
 		return nil
 	}
 
-	options := buildSongOptions(result.Songs)
+	options := buildSongOptions(result.Songs, pal)
 
-	titleStyle := lipgloss.NewStyle().Foreground(cyan).Bold(true)
+	titleStyle := lipgloss.NewStyle().Foreground(pal.Primary).Bold(true)
 	var selected []int
 	err = huh.NewMultiSelect[int]().
 		Title(titleStyle.Render(fmt.Sprintf(
@@ -115,25 +109,25 @@ func runInteractive(keyword, dir, theme string) error {
 	}
 
 	if effectiveDir == "" {
-		effectiveDir = filepath.Join(".", "downloads")
+		effectiveDir = config.DefaultDownloadDir()
 	}
 	outDir := filepath.Join(effectiveDir, downloader.SanitizeFilename(keyword))
 
 	fmt.Fprintf(os.Stderr, "\n%s Downloading %d track(s) → %s\n\n",
-		lipgloss.NewStyle().Foreground(green).Bold(true).Render("▶"),
+		lipgloss.NewStyle().Foreground(pal.OK).Bold(true).Render("▶"),
 		len(songs), outDir)
 
-	results := batchDownload(reg, songs, outDir, red, green)
-	printSummary(results, cyan, green, red)
+	results := batchDownload(reg, songs, outDir, quality, pal)
+	printSummary(results, pal)
 
 	return nil
 }
 
-func buildSongOptions(songs []models.Song) []huh.Option[int] {
-	titleStyle  := lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0")).Bold(true)
-	artistStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0097AF"))
+func buildSongOptions(songs []models.Song, pal Palette) []huh.Option[int] {
+	titleStyle  := lipgloss.NewStyle().Foreground(pal.Text).Bold(true)
+	artistStyle := lipgloss.NewStyle().Foreground(pal.Primary)
 	albumStyle  := lipgloss.NewStyle().Faint(true)
-	fmtStyle    := lipgloss.NewStyle().Foreground(lipgloss.Color("#00C97A"))
+	fmtStyle    := lipgloss.NewStyle().Foreground(pal.OK)
 	sizeStyle   := lipgloss.NewStyle().Faint(true)
 	naStyle     := lipgloss.NewStyle().Faint(true)
 
@@ -141,11 +135,9 @@ func buildSongOptions(songs []models.Song) []huh.Option[int] {
 	for i, s := range songs {
 		fmtStr := formatLabel(s.BR)
 
-		// Format: label colored, trailing pad uncolored → Size always at fixed offset.
-		// Format labels are all ASCII so len == visual width.
 		var meta string
 		if fmtStr != "" {
-			fmtTrail  := strings.Repeat(" ", 8-len(fmtStr))
+			fmtTrail   := strings.Repeat(" ", 8-len(fmtStr))
 			sizePadded := fmt.Sprintf("%5.1f MB", float64(s.Size)/(1024*1024))
 			meta = fmtStyle.Render(fmtStr) + fmtTrail + "  " + sizeStyle.Render(sizePadded)
 		} else {
@@ -179,15 +171,7 @@ func formatLabel(br int) string {
 	}
 }
 
-func sizeLabel(bytes int) string {
-	if bytes <= 0 {
-		return "--"
-	}
-	return fmt.Sprintf("%.1f MB", float64(bytes)/(1024*1024))
-}
-
 // truncateWidth truncates s to at most maxWidth terminal columns (CJK=2, others=1).
-// Reserves 1 column for the "…" so the result never exceeds maxWidth.
 func truncateWidth(s string, maxWidth int) string {
 	if runewidth.StringWidth(s) <= maxWidth {
 		return s
@@ -219,15 +203,15 @@ type trackJob struct {
 	idx  int
 }
 
-func batchDownload(reg *api.Registry, songs []models.Song, outDir string, red, green color.Color) []downloader.Result {
+func batchDownload(reg *api.Registry, songs []models.Song, outDir, quality string, pal Palette) []downloader.Result {
 	results := make([]downloader.Result, len(songs))
 	jobs := make(chan trackJob, len(songs))
 	var wg sync.WaitGroup
 
-	okStyle   := lipgloss.NewStyle().Foreground(green).Bold(true)
-	failStyle := lipgloss.NewStyle().Foreground(red).Bold(true)
+	okStyle   := lipgloss.NewStyle().Foreground(pal.OK).Bold(true)
+	failStyle := lipgloss.NewStyle().Foreground(pal.Fail).Bold(true)
 	dimStyle  := lipgloss.NewStyle().Faint(true)
-	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0"))
+	nameStyle := lipgloss.NewStyle().Foreground(pal.Text)
 
 	var mu sync.Mutex
 
@@ -237,8 +221,6 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string, red, g
 			defer wg.Done()
 			for job := range jobs {
 				s := job.song
-				filename := downloader.DefaultFilename(s.Title, s.Artist)
-				outPath := filepath.Join(outDir, filename)
 
 				mu.Lock()
 				fmt.Fprintf(os.Stderr, "  [%d/%d] %s  %s",
@@ -247,14 +229,20 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string, red, g
 					dimStyle.Render("— "+s.Artist+" ..."))
 				mu.Unlock()
 
-				urlResult, err := reg.GetURL(s.Source, s.URLID, api.URLOptions{})
+				urlResult, err := reg.GetURL(s.Source, s.URLID, api.URLOptions{Quality: quality})
 				if err != nil {
+					filename := downloader.DefaultFilename(s.Title, s.Artist, "")
+					outPath := filepath.Join(outDir, filename)
 					results[job.idx] = downloader.Result{Path: outPath, Err: fmt.Errorf("resolve url: %w", err)}
 					mu.Lock()
 					fmt.Fprintln(os.Stderr, "  "+failStyle.Render("FAIL")+"  "+dimStyle.Render(err.Error()))
 					mu.Unlock()
 					continue
 				}
+
+				ext := downloader.ExtFromURL(urlResult.URL)
+				filename := downloader.DefaultFilename(s.Title, s.Artist, ext)
+				outPath := filepath.Join(outDir, filename)
 
 				res := downloader.DownloadWithResult(downloader.Options{
 					URL:     urlResult.URL,
@@ -286,7 +274,7 @@ func batchDownload(reg *api.Registry, songs []models.Song, outDir string, red, g
 	return results
 }
 
-func printSummary(results []downloader.Result, cyan, green, red color.Color) {
+func printSummary(results []downloader.Result, pal Palette) {
 	var success, fail int
 	var totalSize int64
 	var totalDur time.Duration
@@ -301,9 +289,9 @@ func printSummary(results []downloader.Result, cyan, green, red color.Color) {
 		}
 	}
 
-	header  := lipgloss.NewStyle().Foreground(cyan).Bold(true).Underline(true)
-	okStyle := lipgloss.NewStyle().Foreground(green).Bold(true)
-	errStyle := lipgloss.NewStyle().Foreground(red).Bold(true)
+	header   := lipgloss.NewStyle().Foreground(pal.Primary).Bold(true).Underline(true)
+	okStyle  := lipgloss.NewStyle().Foreground(pal.OK).Bold(true)
+	errStyle := lipgloss.NewStyle().Foreground(pal.Fail).Bold(true)
 	dimStyle := lipgloss.NewStyle().Faint(true)
 
 	fmt.Fprintln(os.Stderr)
@@ -322,7 +310,7 @@ func printSummary(results []downloader.Result, cyan, green, red color.Color) {
 		for _, r := range results {
 			if r.Err != nil {
 				fmt.Fprintf(os.Stderr, "  %s  %s\n",
-					lipgloss.NewStyle().Foreground(red).Render("✗"),
+					lipgloss.NewStyle().Foreground(pal.Fail).Render("✗"),
 					dimStyle.Render(filepath.Base(r.Path)+": "+r.Err.Error()))
 			}
 		}

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/md5"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +22,9 @@ import (
 )
 
 const (
-	neteaseBase = "https://music.163.com"
+	neteaseBase      = "https://music.163.com"
+	neteaseEapiBase  = "https://interface.music.163.com"
+	neteaseEapiKey   = "e82ckenh8dichen8"
 
 	// AES encryption constants (from Meting v1.5.11)
 	neteaseNonce = "0CoJUm6Qyw8W8jud"
@@ -37,23 +41,27 @@ const (
 	// X-Real-IP random range (112.31.0.0 – 112.31.255.255)
 	neteaseIPMin = 1884815360
 	neteaseIPMax = 1884890111
-
-	// CGG fallback API for URL resolution
-	neteaseCGGBase = "https://api-v2.cenguigui.cn/api/netease/music_v1.php"
 )
 
 // Netease implements MusicSource and LyricsSource for 网易云音乐.
 type Netease struct {
-	client *http.Client
-	rng    *rand.Rand
+	client    *http.Client
+	rng       *rand.Rand
+	musicU    string // MUSIC_U token value; empty = anonymous
+	csrf      string // __csrf token; required alongside MUSIC_U for VIP quality access
+	cookieRaw string // full browser cookie string; overrides musicU/csrf when set
 }
 
-// NewNetease creates a Netease API client.
-func NewNetease() *Netease {
-	return &Netease{
+// NewNetease creates a Netease API client. Pass a MUSIC_U token to enable VIP access.
+func NewNetease(musicU ...string) *Netease {
+	n := &Netease{
 		client: &http.Client{Timeout: 15 * time.Second},
 		rng:    rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+	if len(musicU) > 0 {
+		n.musicU = musicU[0]
+	}
+	return n
 }
 
 // Name returns the source identifier.
@@ -238,23 +246,37 @@ func (n *Netease) Search(keyword string, opts ...SearchOptions) ([]models.Song, 
 }
 
 // GetURL resolves a playable download URL for the given song ID.
-// It tries the official weapi first (with requested quality), then falls back
-// to the CGG third-party API if the official API returns an empty URL.
+// When a browser cookie is present, tries eapi first (supports VIP quality levels),
+// then falls back to weapi for anonymous / basic accounts.
 func (n *Netease) GetURL(id string, opts ...URLOptions) (models.URLResult, error) {
 	var o URLOptions
 	if len(opts) > 0 {
 		o = opts[0]
 	}
-	br := neteasebrForQuality(o.Quality)
-	payload := map[string]any{
-		"ids": []string{id},
-		"br":  br,
+	csrf := n.csrf
+	if csrf == "" && n.cookieRaw != "" {
+		csrf = extractCSRF(n.cookieRaw)
 	}
 
-	body, err := n.weapi("/weapi/song/enhance/player/url", payload)
+	// Try eapi when we have a browser cookie — it properly honours VIP quality levels.
+	if n.cookieRaw != "" {
+		if r, err := n.getURLEapi(id, o.Quality, csrf); err == nil {
+			return r, nil
+		}
+	}
+
+	// weapi — works for anonymous and basic accounts.
+	br := neteasebrForQuality(o.Quality)
+	idInt, _ := strconv.Atoi(id)
+	payload := map[string]any{
+		"ids":        []int{idInt},
+		"br":         br,
+		"csrf_token": csrf,
+	}
+
+	body, err := n.weapi("/weapi/song/enhance/player/url?csrf_token="+csrf, payload)
 	if err != nil {
-		// weapi network failure — go straight to fallback
-		return n.getURLFallback(id, o.Quality)
+		return models.URLResult{}, fmt.Errorf("netease: resolve url: %w", err)
 	}
 
 	var resp struct {
@@ -270,7 +292,7 @@ func (n *Netease) GetURL(id string, opts ...URLOptions) (models.URLResult, error
 		Code int `json:"code"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil || resp.Code != 200 || len(resp.Data) == 0 {
-		return n.getURLFallback(id, o.Quality)
+		return models.URLResult{}, fmt.Errorf("netease: unexpected response (code=%d)", resp.Code)
 	}
 
 	d := resp.Data[0]
@@ -279,8 +301,7 @@ func (n *Netease) GetURL(id string, opts ...URLOptions) (models.URLResult, error
 		resolvedURL = d.UF.URL
 	}
 	if resolvedURL == "" {
-		// Song blocked/VIP — try fallback before giving up
-		return n.getURLFallback(id, o.Quality)
+		return models.URLResult{}, fmt.Errorf("netease: song id=%s not available", id)
 	}
 
 	return models.URLResult{
@@ -293,41 +314,42 @@ func (n *Netease) GetURL(id string, opts ...URLOptions) (models.URLResult, error
 	}, nil
 }
 
-// getURLFallback resolves via the CGG third-party API.
-func (n *Netease) getURLFallback(id, quality string) (models.URLResult, error) {
-	level := neteaseCGGLevel(quality)
-	apiURL := fmt.Sprintf("%s?id=%s&level=%s", neteaseCGGBase, url.QueryEscape(id), level)
-
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return models.URLResult{}, fmt.Errorf("netease fallback: %w", err)
+// getURLEapi resolves a URL via the eapi endpoint using VIP quality levels.
+func (n *Netease) getURLEapi(id, quality, csrf string) (models.URLResult, error) {
+	level := neteaseEapiLevel(quality)
+	payload := map[string]any{
+		"ids":        "[" + id + "]",
+		"level":      level,
+		"encodeType": "flac",
+		"csrf_token": csrf,
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", "https://music.163.com/")
 
-	resp, err := n.client.Do(req)
+	body, err := n.eapi("/api/song/enhance/player/url/v1", payload)
 	if err != nil {
-		return models.URLResult{}, fmt.Errorf("netease fallback: %w", err)
+		return models.URLResult{}, err
 	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
 
-	var cgg struct {
-		Code int `json:"code"`
-		Data struct {
+	var resp struct {
+		Data []struct {
 			URL  string `json:"url"`
-			BR   int    `json:"br"`
 			Size int    `json:"size"`
+			BR   int    `json:"br"`
+			Code int    `json:"code"`
 		} `json:"data"`
+		Code int `json:"code"`
 	}
-	if err := json.Unmarshal(raw, &cgg); err != nil || cgg.Code != 200 || cgg.Data.URL == "" {
-		return models.URLResult{}, fmt.Errorf("netease: song id=%s not available (official blocked, fallback failed)", id)
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return models.URLResult{}, fmt.Errorf("eapi decode: %w", err)
+	}
+	if resp.Code != 200 || len(resp.Data) == 0 || resp.Data[0].URL == "" {
+		return models.URLResult{}, fmt.Errorf("eapi: no url (code=%d)", resp.Code)
 	}
 
+	d := resp.Data[0]
 	return models.URLResult{
-		URL:     cgg.Data.URL,
-		Size:    cgg.Data.Size,
-		BR:      cgg.Data.BR,
+		URL:     d.URL,
+		Size:    d.Size,
+		BR:      d.BR,
 		Quality: quality,
 		Source:  "netease",
 		ID:      id,
@@ -363,6 +385,17 @@ func (n *Netease) GetLyrics(id string) (string, error) {
 	return resp.Lrc.Lyric, nil
 }
 
+// extractCSRF parses the __csrf value out of a raw browser cookie string.
+func extractCSRF(cookieRaw string) string {
+	for _, part := range strings.Split(cookieRaw, ";") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "__csrf=") {
+			return strings.TrimPrefix(part, "__csrf=")
+		}
+	}
+	return ""
+}
+
 // neteasebrForQuality maps a quality string to a Netease bitrate value (bps).
 func neteasebrForQuality(q string) int {
 	switch q {
@@ -375,14 +408,14 @@ func neteasebrForQuality(q string) int {
 	}
 }
 
-// neteaseCGGLevel maps a quality string to a CGG API level name.
-func neteaseCGGLevel(q string) string {
+// neteaseEapiLevel maps a quality string to an eapi level name.
+func neteaseEapiLevel(q string) string {
 	switch q {
 	case "flac":
-		return "hires"
+		return "lossless"
 	case "128k":
 		return "standard"
-	default:
+	default: // "320k" or ""
 		return "exhigh"
 	}
 }
@@ -435,6 +468,95 @@ func (n *Netease) weapi(path string, params map[string]any) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+// eapi sends an AES-ECB-encrypted POST to the newer interface.music.163.com endpoint.
+// This is required for VIP quality levels (lossless/hires) which weapi ignores.
+// path uses the /api/... form; the URL is built by replacing /api with /eapi.
+func (n *Netease) eapi(path string, params map[string]any) ([]byte, error) {
+	text, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+
+	h := md5.New()
+	h.Write([]byte("nobody"))
+	h.Write([]byte(path))
+	h.Write([]byte("use"))
+	h.Write(text)
+	h.Write([]byte("md5forencrypt"))
+	digest := hex.EncodeToString(h.Sum(nil))
+
+	message := path + "-36cd479b6b5-" + string(text) + "-36cd479b6b5-" + digest
+	enc, err := aesECBEncrypt([]byte(message), []byte(neteaseEapiKey))
+	if err != nil {
+		return nil, err
+	}
+
+	form := url.Values{}
+	form.Set("params", strings.ToUpper(hex.EncodeToString(enc)))
+
+	apiURL := neteaseEapiBase + "/eapi" + strings.TrimPrefix(path, "/api")
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	n.setHeaders(req)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := n.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+
+	// Successful eapi responses are AES-ECB-encrypted binary; decrypt when needed.
+	if len(raw) > 0 && raw[0] != '{' {
+		if dec, decErr := aesECBDecrypt(raw, []byte(neteaseEapiKey)); decErr == nil {
+			raw = dec
+		}
+	}
+	return raw, nil
+}
+
+// aesECBEncrypt encrypts plaintext using AES-128-ECB with PKCS7 padding.
+func aesECBEncrypt(plaintext, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	bs := block.BlockSize()
+	plaintext = pkcs7Pad(plaintext, bs)
+	ciphertext := make([]byte, len(plaintext))
+	for i := 0; i < len(plaintext); i += bs {
+		block.Encrypt(ciphertext[i:i+bs], plaintext[i:i+bs])
+	}
+	return ciphertext, nil
+}
+
+// aesECBDecrypt decrypts AES-128-ECB ciphertext with PKCS7 unpadding.
+func aesECBDecrypt(ciphertext, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	bs := block.BlockSize()
+	if len(ciphertext)%bs != 0 {
+		return nil, fmt.Errorf("ciphertext length not a multiple of block size")
+	}
+	plaintext := make([]byte, len(ciphertext))
+	for i := 0; i < len(ciphertext); i += bs {
+		block.Decrypt(plaintext[i:i+bs], ciphertext[i:i+bs])
+	}
+	if len(plaintext) == 0 {
+		return plaintext, nil
+	}
+	pad := int(plaintext[len(plaintext)-1])
+	if pad == 0 || pad > bs {
+		return plaintext, nil // not padded — return as-is
+	}
+	return plaintext[:len(plaintext)-pad], nil
+}
+
 // browserGet performs a GET request with standard browser headers.
 // Used for the public search API which rejects CloudMusic app headers.
 func (n *Netease) browserGet(path string) ([]byte, error) {
@@ -478,11 +600,25 @@ func (n *Netease) get(path string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-// setHeaders applies the iPhone CloudMusic client simulation headers.
+// setHeaders applies request headers for the Netease API.
+// Uses browser UA when a full browser cookie is present; iPhone simulation otherwise.
 func (n *Netease) setHeaders(req *http.Request) {
 	req.Header.Set("Referer", "https://music.163.com/")
-	req.Header.Set("Cookie", neteaseCookie)
-	req.Header.Set("User-Agent", neteaseUA)
+	var cookie string
+	if n.cookieRaw != "" {
+		cookie = n.cookieRaw
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	} else {
+		cookie = neteaseCookie
+		if n.musicU != "" {
+			cookie += "; MUSIC_U=" + n.musicU
+		}
+		if n.csrf != "" {
+			cookie += "; __csrf=" + n.csrf
+		}
+		req.Header.Set("User-Agent", neteaseUA)
+	}
+	req.Header.Set("Cookie", cookie)
 	req.Header.Set("X-Real-IP", n.randomChineseIP())
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.8,gl;q=0.6,zh-TW;q=0.4")

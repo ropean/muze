@@ -23,7 +23,7 @@ When the user confirms a selection, `GetURL` is called once per track immediatel
 
 ## Sources
 
-Currently only **netease** is registered. Other sources (kugou, kuwo, qq) were explored but their APIs are unreliable from outside China and depend on fragile third-party proxies (cenguigui.cn, vkeys.cn) — not included for now.
+Currently only **netease** is registered. Other sources (kugou, kuwo, qq) were explored but their APIs are unreliable from outside China — not included for now.
 
 ## API Compatibility
 

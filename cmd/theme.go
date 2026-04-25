@@ -7,20 +7,21 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// resolveTheme returns the huh.Theme for the given name.
-// Falls back to ThemeBase16 for unknown names.
-func resolveTheme(name string) huh.Theme {
+// resolveTheme returns the huh.Theme and content Palette for the given name.
+// Falls back to ThemeBase16 / base16 palette for unknown names.
+func resolveTheme(name string) (huh.Theme, Palette) {
+	pal := paletteFor(name)
 	switch name {
 	case "tech":
-		return huh.ThemeFunc(techTheme)
+		return huh.ThemeFunc(techTheme), pal
 	case "charm":
-		return huh.ThemeFunc(huh.ThemeCharm)
+		return huh.ThemeFunc(huh.ThemeCharm), pal
 	case "dracula":
-		return huh.ThemeFunc(huh.ThemeDracula)
+		return huh.ThemeFunc(huh.ThemeDracula), pal
 	case "catppuccin":
-		return huh.ThemeFunc(huh.ThemeCatppuccin)
-	default: // "base16" and anything else
-		return huh.ThemeFunc(huh.ThemeBase16)
+		return huh.ThemeFunc(huh.ThemeCatppuccin), pal
+	default:
+		return huh.ThemeFunc(huh.ThemeBase16), pal
 	}
 }
 

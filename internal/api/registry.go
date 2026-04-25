@@ -14,10 +14,24 @@ type Registry struct {
 	sources map[string]MusicSource
 }
 
+// RegistryOptions controls optional Registry configuration.
+type RegistryOptions struct {
+	NeteaseCookie    string // MUSIC_U token value for VIP access
+	NeteaseCsrf      string // __csrf token value (required alongside MUSIC_U)
+	NeteaseCookieRaw string // full browser cookie string; overrides Cookie/Csrf if set
+}
+
 // NewRegistry returns a Registry pre-populated with all built-in sources.
-func NewRegistry() *Registry {
+func NewRegistry(opts ...RegistryOptions) *Registry {
+	var o RegistryOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
 	r := &Registry{sources: make(map[string]MusicSource)}
-	r.Register(NewNetease())
+	n := NewNetease(o.NeteaseCookie)
+	n.csrf = o.NeteaseCsrf
+	n.cookieRaw = o.NeteaseCookieRaw
+	r.Register(n)
 	return r
 }
 
